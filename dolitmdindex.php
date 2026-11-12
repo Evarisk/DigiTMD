@@ -18,7 +18,7 @@
 /**
  *	\file       dolitmdindex.php
  *	\ingroup    dolitmd
- *	\brief      Home page of dolitmd top menu
+ *	\brief      Former home page of DoliTMD: the top menu opens the list of the TMD requests, kept for the bookmarks
  */
 
 // Load dolitmd environment
@@ -29,33 +29,10 @@ if (file_exists('dolitmd.main.inc.php')) {
 }
 
 // Global variables definitions
-global $conf, $db, $langs, $moduleName, $moduleNameLowerCase, $user;
-
-// Libraries
-require_once __DIR__ . '/core/modules/mod' . $moduleName . '.class.php';
-
-// Load translation files required by the page
-saturne_load_langs();
-
-// Initialize technical objects
-$classname = 'mod' . $moduleName;
-$modModule = new $classname($db);
+global $user;
 
 // Security check
-$permissiontoread = $user->rights->$moduleNameLowerCase->read;
-saturne_check_access($permissiontoread);
+saturne_check_access($user->hasRight('dolitmd', 'tmd', 'read'));
 
-/*
- * View
- */
-
-$title   = $langs->trans('ModuleArea', $moduleName);
-$helpUrl = 'FR:Module_' . $moduleName;
-
-saturne_header(0, '', $title . ' ' . $modModule->version, $helpUrl);
-
-print load_fiche_titre($title . ' ' . $modModule->version, '', $moduleNameLowerCase . '_color.png@' . $moduleNameLowerCase);
-
-// End of page
-llxFooter();
-$db->close();
+header('Location: ' . dol_buildpath('/saturne/view/saturne_list.php', 1) . '?object_type=tmd&mainmenu=dolitmd&leftmenu=tmd');
+exit;

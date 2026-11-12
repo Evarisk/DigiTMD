@@ -1,4 +1,4 @@
-# Copyright (C) 2023 EVARISK <technique@evarisk.com>
+# Copyright (C) 2023-2026 EVARISK <technique@evarisk.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,10 +14,158 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #
-# dolitmd
+# Generic
 #
 
-ModuledolitmdName      = dolitmd
-ModuledolitmdDesc      = Simplification of CRM
-dolitmdDescription     = Simplification of CRM
-dolitmdDescriptionLong = Simplification of CRM
+ModuleDoliTMDName      = DoliTMD
+ModuleDoliTMDDesc      = TMD requests: a mail received on the TMD mailbox creates a ticket, followed until it is invoiced
+DoliTMDDescription     = TMD requests: a mail received on the TMD mailbox creates a ticket, followed until it is invoiced
+DoliTMDDescriptionLong = Each mail received on the TMD mailbox (module Inbox) creates a ticket assigned to the chosen person, linked to the thirdparty or the contact of the sender, and a TMD request followed until it is invoiced.
+DoliTMD                = DoliTMD
+
+#
+# Setup
+#
+
+ModuleSettings                = Settings
+TmdSetupReception             = Reception of the TMD requests
+TmdSetupMailbox               = Mailbox of the TMD requests
+TmdSetupMailboxHelp           = Each mail received in the inbox of this mailbox (module Inbox) creates a ticket and a TMD request.
+TmdSetupNoMailbox             = None
+TmdSetupAssignUser            = Assign the tickets to
+TmdSetupAssignUserHelp        = Person each new ticket is assigned to.
+TmdSetupInboxDisabled         = The module Inbox must be enabled to receive the TMD requests by mail.
+TmdSetupNoInboxMailbox        = No mailbox in the module Inbox: add it from Inbox > Settings > Mailboxes.
+TmdSetupMailboxNotActive      = This mailbox is not active in Inbox: no mail is read there.
+TmdSetupSaved                 = Setup saved
+
+#
+# TMD request
+#
+
+Tmd                    = TMD request
+TheTmd                 = The TMD request
+TmdRequests            = TMD requests
+TmdList                = TMD requests
+NewTmd                 = New TMD request
+ModifyTmd              = Modify the TMD request
+TmdDateMail            = Received on
+TmdEmailFrom           = Sender
+TmdSubject             = Subject
+TmdSoftwareRef         = nomeref ID
+TmdSoftwareRefHelp     = Unique identifier of the request in nomeref.
+TmdState               = State
+TmdStateHelp           = Given by the ticks: Invoiced wins over Done.
+TmdStatusPending       = Pending
+TmdStatusDone          = Done
+TmdStatusDoneToInvoice = Done, to invoice
+TmdStatusInvoiced      = Invoiced
+TmdDone                = Done
+TmdInvoiced            = Invoiced
+TmdInvoicedHelp        = An invoiced request is done too: ticking Invoiced ticks Done.
+TmdDateDone            = Done on
+TmdUserDone            = Done by
+TmdDateInvoiced        = Invoiced on
+TmdUserInvoiced        = Invoiced by
+TmdMessageId           = Message-ID of the mail
+TmdAll                 = All
+TmdFlagSaved           = Request %s: %s
+TmdFlagError           = The tick could not be saved
+TmdMailNoSubject       = (no subject)
+TmdTicketFromMail      = TMD request received from %s
+TmdOpenTicket          = Open the ticket
+TmdUnknownSender       = Unknown sender: no thirdparty nor contact with this address
+TmdFollowUp            = Follow-up
+TmdFollowUpHelp        = Done and Invoiced: a click on a picto changes it at once. Invoiced makes the request done, done closes the ticket.
+TmdNotDone             = Not done yet
+TmdNotInvoiced         = Not invoiced yet
+TmdClickToSet          = click to tick
+TmdClickToCancel       = click to cancel
+TmdStateChangeHelp     = Change the state: Done closes the ticket, Pending opens it again
+TmdMassToInvoiced      = Set to Invoiced
+TmdMassToDone          = Set to Done
+TmdMassToPending       = Set back to Pending
+TmdMassStateQuestion   = Set the %s selected requests to the state « %s »? Their tickets follow (Done closes the ticket, Pending opens it again).
+TmdMassStateDone       = %s request(s) set to the state « %s »
+
+#
+# Answers, delays, invoicing, automatic mails
+#
+
+TmdDateDue                    = Deadline
+TmdDateDueHelp                = Date of reception plus the delay of the setup. Changed on the card.
+TmdLate                       = Late
+TmdLateSince                  = Deadline passed for %s day(s)
+TmdDueSoon                    = Deadline within 3 days
+TmdReplies                    = Answers
+TmdRepliesCount               = %s answer(s) of the sender, added to the ticket
+TmdDateLastReply              = Last answer
+TmdReplyFrom                  = Answer of %s
+TmdInvoice                    = Invoice
+TmdMassCreateInvoices         = Create the invoices
+TmdMassCreateInvoicesQuestion = Create the invoices of the %s selected requests? One draft invoice per thirdparty, one line per request; the requests become invoiced.
+TmdMassInvoicesDone           = %s draft invoice(s) created
+TmdMassInvoicesSkipped        = Requests left aside
+TmdMassInvoicesError          = Invoice not created
+TmdInvoiceNoProduct           = Choose the service invoiced in the setup of DoliTMD
+TmdInvoiceAlready             = already on an invoice
+TmdInvoiceNoThirdparty        = no thirdparty
+TmdSetupDelay                 = Delays
+TmdSetupDelayDays             = Delay to handle a request
+TmdSetupDelayDaysHelp         = A request received must be done within this delay; after, it is late. 0 = no deadline.
+TmdSetupInvoicing             = Invoicing
+TmdSetupInvoiceProduct        = Service invoiced
+TmdSetupInvoiceProductHelp    = Invoice line of each request (« Create the invoices » in the list), at the price of the service for the thirdparty.
+TmdSetupInvoiceModules        = Enable the modules Invoices and Services
+TmdSetupMails                 = Automatic mails
+TmdSetupMailsTemplates        = Modify the templates of mail
+TmdSetupMailsHelp             = Off by default. Sent by the mailbox of the TMD requests, written from their template (Setup > Emails > Templates, type « TMD requests »).
+TmdSetupMailAck               = Receipt
+TmdSetupMailAckHelp           = To the customer, when the request is received: reference of the ticket, deadline and link of the tracking page.
+TmdSetupMailDone              = Request done
+TmdSetupMailDoneHelp          = To the customer, when the request becomes done, with the link of the tracking page (and its documents).
+TmdSetupMailLate              = Reminder of the late requests
+TmdSetupMailLateHelp          = Every morning, to the person assigned: his late requests.
+TmdMailAckTemplate            = DoliTMD - Receipt
+TmdMailDoneTemplate           = DoliTMD - Request done
+TmdMailLateTemplate           = DoliTMD - Reminder of the late requests
+(TmdMailAckTemplate)          = DoliTMD - Receipt
+(TmdMailDoneTemplate)         = DoliTMD - Request done
+(TmdMailLateTemplate)         = DoliTMD - Reminder of the late requests
+TmdMailAckSent                = Receipt sent to %s
+TmdMailDoneSent               = Mail « request done » sent to %s
+TmdCronLate                   = DoliTMD: reminder of the late requests
+TmdCronLateComment            = Sends every morning to the person assigned the list of his late TMD requests (when switched on in the setup).
+TmdCronCatchUp         = DoliTMD: mails of the TMD mailbox
+TmdCronCatchUpComment  = Fetches the new mails of the TMD mailbox (Inbox), then creates the ticket and the TMD request of each mail that has none yet (or adds the answer to the ticket of its request).
+
+# Public tracking page
+TmdTrackId                    = Tracking number
+TmdPublicTracking             = Customer tracking
+TmdPublicTrackingHelp         = The customer follows the request on this page, without an account: its state and the documents of the tab Documents. The link goes in the automatic mails; it opens only with the tracking number.
+TmdPublicPage                 = Tracking page
+TmdPublicOpen                 = Open the tracking page
+TmdPublicCopyLink             = Copy the link
+TmdPublicDocumentsShared      = %s document(s) seen by the customer
+TmdPublicDocumentsNotice      = The documents added here are seen by the customer on the tracking page.
+TmdPublicTitle                = Tracking of your request
+TmdPublicTitleOf              = Tracking of the request %s
+TmdPublicFormHelp             = Type the tracking number received by mail to see where your request stands and get its documents.
+TmdPublicFollow               = Follow my request
+TmdPublicNotFound             = No request matches this tracking number. Check it in the mail you received.
+TmdPublicRequest              = Request %s
+TmdPublicNoSubject            = Your request
+TmdPublicReceivedOn           = Received on %s
+TmdPublicStatePending         = Being processed
+TmdPublicStateDone            = Done
+TmdPublicStateInvoiced        = Done and invoiced
+TmdPublicStepReceived         = Request received
+TmdPublicStepProcessing       = Being processed
+TmdPublicStepDone             = Request done
+TmdPublicDueBefore            = Planned before %s
+TmdPublicReference            = Reference to quote
+TmdPublicDoneOn               = Done on
+TmdPublicDue                  = Planned before
+TmdPublicDocuments            = Documents of your request
+TmdPublicNoDocument           =No document yet: they will show here as soon as they are ready.
+TmdPublicContact              = A question about this request? Write to us, keeping the reference %s in the subject of the mail.
