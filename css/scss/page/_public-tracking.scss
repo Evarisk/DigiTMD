@@ -1,0 +1,515 @@
+// Public page of a TMD request (public/tmd/tracking.php): the card of the public pages of Saturne (.page-public-card,
+// .public-card__container), the form of the tracking number, then the state, the steps and the documents.
+// Outside the theme of the back office: its own colours, those of the public cards of Saturne.
+
+$pt-primary: #0d8aff;
+$pt-text: #1f2937;
+$pt-muted: #6b7280;
+$pt-line: #e5e9f2;
+$pt-soft: #f4f7fb;
+$pt-pending: #b45309;
+$pt-pending-bg: #fef3c7;
+$pt-done: #15803d;
+$pt-done-bg: #dcfce7;
+$pt-invoiced: #475569;
+$pt-invoiced-bg: #e2e8f0;
+$pt-error: #b91c1c;
+$pt-error-bg: #fee2e2;
+
+.page-public-tmd {
+  margin-top: 0;
+  color: $pt-text;
+
+  // The page of Saturne leaves its blocks of Dolibarr around: no gap above the logo
+  #id-right, .fiche {
+    padding: 0;
+    margin: 0;
+  }
+
+  .dolitmd-public {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 16px 40px;
+
+    * {
+      box-sizing: border-box;
+    }
+  }
+
+  // Who the page is from
+  .dolitmd-public__brand {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+
+  .dolitmd-public__logo {
+    max-width: 220px;
+    max-height: 90px;
+    object-fit: contain;
+  }
+
+  .dolitmd-public__company {
+    font-size: 20px;
+    font-weight: 700;
+    color: $pt-primary;
+  }
+
+  .public-card__container.dolitmd-public__card {
+    max-width: none;
+    padding: 32px;
+    overflow: hidden;
+  }
+
+  .dolitmd-public__title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: $pt-text;
+    overflow-wrap: anywhere;
+  }
+
+  // Screen « form »
+  .dolitmd-public__intro {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .dolitmd-public__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    margin-bottom: 12px;
+    border-radius: 50%;
+    background: rgba($pt-primary, 0.1);
+    color: $pt-primary;
+    font-size: 22px;
+  }
+
+  .dolitmd-public__lead {
+    max-width: 480px;
+    margin: 8px auto 0;
+    color: $pt-muted;
+    line-height: 1.5;
+  }
+
+  .dolitmd-public__search {
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  .dolitmd-public__label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .dolitmd-public__search-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  // By its id: the rule of eldy on the text inputs (input[type=text]:not(...)) weighs more than two classes
+  .dolitmd-public__search #track_id.dolitmd-public__input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 44px;
+    padding: 0 14px;
+    border: 1px solid $pt-line;
+    border-radius: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 16px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: #fff;
+
+    &:focus {
+      outline: none;
+      border-color: $pt-primary;
+      box-shadow: 0 0 0 3px rgba($pt-primary, 0.15);
+    }
+
+    &::placeholder {
+      color: #b6bdc9;
+    }
+  }
+
+  .dolitmd-public__button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 44px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: 8px;
+    background: $pt-primary;
+    color: #fff;
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover, &:focus {
+      background: #0b74d6;
+      color: #fff;
+      text-decoration: none;
+    }
+  }
+
+  .dolitmd-public__button--light {
+    height: 36px;
+    padding: 0 14px;
+    background: rgba($pt-primary, 0.1);
+    color: $pt-primary;
+
+    &:hover, &:focus {
+      background: rgba($pt-primary, 0.18);
+      color: $pt-primary;
+    }
+  }
+
+  .dolitmd-public__notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    max-width: 520px;
+    margin: 0 auto 16px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    line-height: 1.4;
+  }
+
+  .dolitmd-public__notice--error {
+    background: $pt-error-bg;
+    color: $pt-error;
+  }
+
+  // Screen « request »: subject, then its state
+  .dolitmd-public__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid $pt-line;
+  }
+
+  .dolitmd-public__heading {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .dolitmd-public__eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: $pt-primary;
+  }
+
+  .dolitmd-public__meta {
+    color: $pt-muted;
+    font-size: 13px;
+  }
+
+  .dolitmd-public__state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .dolitmd-public__state--pending {
+    background: $pt-pending-bg;
+    color: $pt-pending;
+  }
+
+  .dolitmd-public__state--done {
+    background: $pt-done-bg;
+    color: $pt-done;
+  }
+
+  .dolitmd-public__state--invoiced {
+    background: $pt-invoiced-bg;
+    color: $pt-invoiced;
+  }
+
+  // Steps: received, being processed, done
+  .dolitmd-public__steps {
+    display: flex;
+    margin: 28px 0 24px;
+    padding: 0;
+    list-style: none;
+  }
+
+  .dolitmd-public__step {
+    position: relative;
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+    padding: 0 4px;
+
+    // The line towards the step before
+    &:not(:first-child)::before {
+      content: '';
+      position: absolute;
+      top: 17px;
+      right: 50%;
+      width: 100%;
+      height: 3px;
+      background: $pt-line;
+      z-index: 0;
+    }
+
+    &.is-done:not(:first-child)::before, &.is-current:not(:first-child)::before {
+      background: $pt-done;
+    }
+  }
+
+  .dolitmd-public__dot {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    margin-bottom: 4px;
+    border-radius: 50%;
+    border: 3px solid $pt-line;
+    background: #fff;
+    color: #b6bdc9;
+    font-size: 14px;
+  }
+
+  .dolitmd-public__step.is-done .dolitmd-public__dot {
+    border-color: $pt-done;
+    background: $pt-done;
+    color: #fff;
+  }
+
+  .dolitmd-public__step.is-current .dolitmd-public__dot {
+    border-color: $pt-pending;
+    background: $pt-pending-bg;
+    color: $pt-pending;
+  }
+
+  .dolitmd-public__step-label {
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .dolitmd-public__step.is-todo .dolitmd-public__step-label {
+    color: $pt-muted;
+  }
+
+  .dolitmd-public__step-date {
+    min-height: 1.2em;
+    color: $pt-muted;
+    font-size: 12px;
+  }
+
+  // Tracking number, reference, dates
+  .dolitmd-public__facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin: 0 0 28px;
+  }
+
+  .dolitmd-public__fact {
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: $pt-soft;
+
+    dt {
+      margin-bottom: 4px;
+      color: $pt-muted;
+      font-size: 12px;
+    }
+
+    dd {
+      margin: 0;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .dolitmd-public__mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.04em;
+  }
+
+  // Documents
+  .dolitmd-public__subtitle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .dolitmd-public__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgba($pt-primary, 0.1);
+    color: $pt-primary;
+    font-size: 12px;
+  }
+
+  .dolitmd-public__files {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid $pt-line;
+    border-radius: 8px;
+  }
+
+  .dolitmd-public__file {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+
+    & + & {
+      border-top: 1px solid $pt-line;
+    }
+  }
+
+  .dolitmd-public__file-icon {
+    flex: 0 0 auto;
+    font-size: 22px;
+    width: 28px;
+    text-align: center;
+  }
+
+  .dolitmd-public__file-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .dolitmd-public__file-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dolitmd-public__file-meta {
+    color: $pt-muted;
+    font-size: 12px;
+  }
+
+  .dolitmd-public__empty {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 16px;
+    border: 1px dashed $pt-line;
+    border-radius: 8px;
+    color: $pt-muted;
+  }
+
+  // How to ask a question about the request
+  .dolitmd-public__contact {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 24px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    background: $pt-soft;
+    color: $pt-muted;
+    line-height: 1.5;
+
+    > i {
+      margin-top: 3px;
+      color: $pt-primary;
+    }
+  }
+
+  .dolitmd-public__contact-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .dolitmd-public__contact-link {
+    font-weight: 600;
+    color: $pt-primary;
+    overflow-wrap: anywhere;
+  }
+
+  .dolitmd-public__footer {
+    margin: 20px 0 0;
+    text-align: center;
+    color: $pt-muted;
+    font-size: 12px;
+  }
+
+  // Phone: everything one under the other, the button of the files as a picto
+  @media (max-width: 600px) {
+    .public-card__container.dolitmd-public__card {
+      padding: 20px 16px;
+    }
+
+    .dolitmd-public__head {
+      flex-direction: column;
+    }
+
+    .dolitmd-public__search-row {
+      flex-direction: column;
+    }
+
+    .dolitmd-public__step-label {
+      font-size: 12px;
+    }
+
+    .dolitmd-public__button--light {
+      width: 36px;
+      padding: 0;
+
+      .dolitmd-public__button-text {
+        display: none;
+      }
+    }
+  }
+}
+
+// Card of the request in the back office: block « customer tracking »
+.dolitmd-tracking-number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.dolitmd-documents-notice {
+  margin: 8px 0;
+}

@@ -1,0 +1,253 @@
+// TMD requests: banner above the list and ticks done / invoiced (list and card).
+// Colours from the tokens of the theme of Saturne (--saturne-*), with a fallback outside the theme.
+
+$dt-accent: #E67E22;
+
+// Banner: cards of the states, then the quick filters
+.dolitmd-list-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  .saturne-kpi-cards {
+    margin-bottom: 0;
+  }
+}
+
+// Cards of the states: a plain thin border all around, no coloured stripe on the left (Saturne draws one); the colour
+// of the state is carried by the tile of the picto only
+body#mainbody .dolitmd-list-banner .saturne-kpi-cards .saturne-kpi-card {
+  border-left-width: 1px;
+  border-left-color: #e2e8f0;
+}
+
+// Column « Follow-up »: the two pictos side by side
+.dolitmd-flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+// Invoice of an invoiced request, after the pictos
+.dolitmd-invoice-link {
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+// Done / invoiced: a picto, faint when it is not so, in its colour when it is (green done, blue invoiced). Clicked, it
+// changes at once
+.dolitmd-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  vertical-align: middle;
+
+  // The real checkbox, invisible, covers the picto: a click anywhere on it changes it (the theme gives the checkboxes
+  // their own size, hence the !important)
+  .dolitmd-flag-input {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    opacity: 0;
+    cursor: inherit;
+  }
+
+  .dolitmd-flag-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    color: var(--saturne-border-strong, #cbd5e1);
+    font-size: 16px;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .1s ease;
+  }
+
+  &:hover .dolitmd-flag-icon {
+    color: var(--saturne-muted, #64748b);
+    background: var(--saturne-bg, #f1f5f9);
+  }
+
+  &:active .dolitmd-flag-icon {
+    transform: scale(.92);
+  }
+
+  .dolitmd-flag-input:focus-visible + .dolitmd-flag-icon {
+    box-shadow: 0 0 0 3px var(--saturne-ring, rgba(37, 99, 235, .2));
+  }
+
+  // Done: green, as the state « Done »
+  &.dolitmd-flag--done.dolitmd-flag--on .dolitmd-flag-icon {
+    color: #16a34a;
+    background: var(--saturne-success-soft, #dcfce7);
+    border-color: rgba(22, 163, 74, .3);
+  }
+
+  // Invoiced: blue, the end of the request
+  &.dolitmd-flag--invoiced.dolitmd-flag--on .dolitmd-flag-icon {
+    color: var(--saturne-primary, #2563eb);
+    background: var(--saturne-primary-soft, #dbeafe);
+    border-color: rgba(37, 99, 235, .3);
+  }
+
+  &.dolitmd-flag--saving {
+    cursor: progress;
+    opacity: .55;
+  }
+
+  &.dolitmd-flag--readonly {
+    cursor: default;
+
+    &:hover .dolitmd-flag-icon {
+      background: transparent;
+    }
+  }
+}
+
+// State changed in the list: a pill in the colours of the badges of the theme (amber, green, grey), with its arrow.
+// Selector heavy on purpose, the theme styles every select of the lists
+$dt-chevron: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23475569' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+
+select.dolitmd-state,
+body#mainbody .div-table-responsive select.dolitmd-state {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  display: inline-block;
+  width: auto !important;
+  min-width: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 3px 24px 3px 11px !important;
+  border-radius: var(--saturne-radius-pill, 999px) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 18px !important;
+  cursor: pointer;
+  box-shadow: none !important;
+  background-image: url($dt-chevron) !important;
+  background-repeat: no-repeat !important;
+  background-position: right 9px center !important;
+  background-size: 9px 6px !important;
+  transition: filter .15s ease, box-shadow .15s ease;
+
+  &:hover {
+    filter: brightness(.97);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--saturne-ring, rgba(37, 99, 235, .2)) !important;
+  }
+
+  // Pending: amber, as badge-status1
+  &.dolitmd-state--0 {
+    background-color: var(--saturne-warning-soft, #fef3c7) !important;
+    border: 1px solid rgba(233, 173, 79, .45) !important;
+    color: #a16207 !important;
+  }
+
+  // Done: green, as badge-status4
+  &.dolitmd-state--1 {
+    background-color: var(--saturne-success-soft, #dcfce7) !important;
+    border: 1px solid rgba(22, 163, 74, .3) !important;
+    color: #15803d !important;
+  }
+
+  // Invoiced: grey, as badge-status6 (closed)
+  &.dolitmd-state--2 {
+    background-color: var(--saturne-bg, #f1f5f9) !important;
+    border: 1px solid var(--saturne-border-strong, #cbd5e1) !important;
+    color: var(--saturne-text-soft, #475569) !important;
+  }
+
+  &.dolitmd-state--saving {
+    opacity: .55;
+    cursor: progress;
+  }
+
+  option {
+    background: #fff;
+    color: #1f2937;
+    font-weight: 400;
+  }
+}
+
+// Card « Late » above the list: red, as the danger tokens of the theme (the theme has no red card)
+body#mainbody .saturne-kpi-card.saturne-kpi-card-red {
+  .saturne-kpi-card-icon {
+    background: var(--saturne-danger-soft, #fee2e2);
+    color: var(--saturne-danger, #dc2626);
+  }
+
+  .saturne-kpi-card-value {
+    color: var(--saturne-danger, #dc2626);
+  }
+}
+
+// Deadline in the list: red badge when late, orange when near, faint when done
+.dolitmd-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+
+  &.dolitmd-due--done {
+    color: var(--saturne-faint, #94a3b8);
+  }
+
+  &.dolitmd-due--soon {
+    color: #c2410c;
+    font-weight: 600;
+  }
+
+  &.dolitmd-due--late {
+    color: var(--saturne-danger, #dc2626);
+    font-weight: 600;
+  }
+
+  .dolitmd-due-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border-radius: var(--saturne-radius-pill, 999px);
+    background: var(--saturne-danger-soft, #fee2e2);
+    border: 1px solid rgba(220, 38, 38, .25);
+    font-size: 11px;
+    line-height: 18px;
+  }
+}
+
+// Answers of the sender before the subject
+.dolitmd-replies {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 4px;
+  padding: 0 7px;
+  border-radius: var(--saturne-radius-pill, 999px);
+  background: var(--saturne-primary-soft, #dbeafe);
+  color: var(--saturne-primary, #2563eb);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+// Column of the identifier of the TMD software: stands out as the reference to type
+.mod-tmd td[data-colkey="software_ref"] .contenteditable:empty::before {
+  content: '—';
+  color: var(--saturne-faint, #9aa3af);
+}
+
+// Picto of the TMD requests in the titles
+.mod-tmd .fa-truck-moving {
+  color: $dt-accent;
+}
