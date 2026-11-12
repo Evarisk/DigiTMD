@@ -1,4 +1,4 @@
-# Copyright (C) 2023 EVARISK <technique@evarisk.com>
+# Copyright (C) 2023-2026 EVARISK <technique@evarisk.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,7 +17,155 @@
 # Générique
 #
 
-ModuledolitmdName      = dolitmd
-ModuledolitmdDesc      = Simplification de la CRM
-dolitmdDescription     = Simplification de la CRM
-dolitmdDescriptionLong = Simplification de la CRM
+ModuleDoliTMDName      = DoliTMD
+ModuleDoliTMDDesc      = Demandes TMD : un mail reçu sur la boîte TMD crée un ticket, suivi jusqu'à la facturation
+DoliTMDDescription     = Demandes TMD : un mail reçu sur la boîte TMD crée un ticket, suivi jusqu'à la facturation
+DoliTMDDescriptionLong = Chaque mail reçu sur la boîte TMD (module Inbox) crée un ticket attribué à la personne choisie, lié au tiers ou au contact de l'expéditeur, et une demande TMD suivie jusqu'à la facturation.
+DoliTMD                = DoliTMD
+
+#
+# Configuration
+#
+
+ModuleSettings                = Configuration
+TmdSetupReception             = Réception des demandes TMD
+TmdSetupMailbox               = Boîte mail des demandes TMD
+TmdSetupMailboxHelp           = Chaque mail reçu dans la Réception de cette boîte (module Inbox) crée un ticket et une demande TMD.
+TmdSetupNoMailbox             = Aucune
+TmdSetupAssignUser            = Attribuer les tickets à
+TmdSetupAssignUserHelp        = Personne à qui chaque nouveau ticket est attribué.
+TmdSetupInboxDisabled         = Le module Inbox doit être activé pour recevoir les demandes TMD par mail.
+TmdSetupNoInboxMailbox        = Aucune boîte mail dans le module Inbox : ajoutez-la depuis Inbox > Paramètres > Boîtes mail.
+TmdSetupMailboxNotActive      = Cette boîte n'est pas active dans Inbox : aucun mail n'y est lu.
+TmdSetupSaved                 = Configuration enregistrée
+
+#
+# Demande TMD
+#
+
+Tmd                    = Demande TMD
+TheTmd                 = La demande TMD
+TmdRequests            = Demandes TMD
+TmdList                = Demandes TMD
+NewTmd                 = Nouvelle demande TMD
+ModifyTmd              = Modifier la demande TMD
+TmdDateMail            = Reçue le
+TmdEmailFrom           = Expéditeur
+TmdSubject             = Objet
+TmdSoftwareRef         = ID nomeref
+TmdSoftwareRefHelp     = Identifiant unique de la demande dans nomeref.
+TmdState               = État
+TmdStateHelp           = Donné par les coches : Facturé l'emporte sur Fait.
+TmdStatusPending       = En attente
+TmdStatusDone          = Fait
+TmdStatusDoneToInvoice = Fait, à facturer
+TmdStatusInvoiced      = Facturé
+TmdDone                = Fait
+TmdInvoiced            = Facturé
+TmdInvoicedHelp        = Une demande facturée est aussi faite : cocher Facturé coche Fait.
+TmdDateDone            = Faite le
+TmdUserDone            = Faite par
+TmdDateInvoiced        = Facturée le
+TmdUserInvoiced        = Facturée par
+TmdMessageId           = Message-ID du mail
+TmdAll                 = Toutes
+TmdFlagSaved           = Demande %s : %s
+TmdFlagError           = La coche n'a pas pu être enregistrée
+TmdMailNoSubject       = (sans objet)
+TmdTicketFromMail      = Demande TMD reçue de %s
+TmdOpenTicket          = Ouvrir le ticket
+TmdUnknownSender       = Expéditeur inconnu : aucun tiers ni contact avec cette adresse
+TmdFollowUp            = Suivi
+TmdFollowUpHelp        = Fait et Facturé : cliquer sur un picto le change aussitôt. Facturé fait passer la demande à Fait, Fait ferme le ticket.
+TmdNotDone             = Pas encore faite
+TmdNotInvoiced         = Pas encore facturée
+TmdClickToSet          = cliquer pour cocher
+TmdClickToCancel       = cliquer pour annuler
+TmdStateChangeHelp     = Changer l'état : Fait ferme le ticket, En attente le rouvre
+TmdMassToInvoiced      = Passer à Facturé
+TmdMassToDone          = Passer à Fait
+TmdMassToPending       = Remettre en attente
+TmdMassStateQuestion   = Passer les %s demandes sélectionnées à l'état « %s » ? Leurs tickets suivent (Fait ferme le ticket, En attente le rouvre).
+TmdMassStateDone       = %s demande(s) passée(s) à l'état « %s »
+
+#
+# Réponses, délais, facturation, mails automatiques
+#
+
+TmdDateDue                    = Échéance
+TmdDateDueHelp                = Date de réception plus le délai de traitement de la configuration. Modifiable sur la fiche.
+TmdLate                       = En retard
+TmdLateSince                  = Échéance dépassée depuis %s jour(s)
+TmdDueSoon                    = Échéance dans moins de 3 jours
+TmdReplies                    = Réponses
+TmdRepliesCount               = %s réponse(s) de l'expéditeur, ajoutée(s) au ticket
+TmdDateLastReply              = Dernière réponse
+TmdReplyFrom                  = Réponse de %s
+TmdInvoice                    = Facture
+TmdMassCreateInvoices         = Créer les factures
+TmdMassCreateInvoicesQuestion = Créer les factures des %s demandes sélectionnées ? Une facture brouillon par tiers, une ligne par demande ; les demandes passent à Facturé.
+TmdMassInvoicesDone           = %s facture(s) brouillon créée(s)
+TmdMassInvoicesSkipped        = Demandes laissées de côté
+TmdMassInvoicesError          = Facture non créée
+TmdInvoiceNoProduct           = Choisissez le service facturé dans la configuration de DoliTMD
+TmdInvoiceAlready             = déjà sur une facture
+TmdInvoiceNoThirdparty        = pas de tiers
+TmdSetupDelay                 = Délais
+TmdSetupDelayDays             = Délai de traitement
+TmdSetupDelayDaysHelp         = Une demande reçue doit être faite dans ce délai ; au-delà, elle est en retard. 0 = pas d'échéance.
+TmdSetupInvoicing             = Facturation
+TmdSetupInvoiceProduct        = Service facturé
+TmdSetupInvoiceProductHelp    = Ligne de facture de chaque demande (« Créer les factures » dans la liste), au prix du service pour le tiers.
+TmdSetupInvoiceModules        = Activez les modules Factures et Services
+TmdSetupMails                 = Mails automatiques
+TmdSetupMailsTemplates        = Modifier les modèles de mail
+TmdSetupMailsHelp             = Désactivés par défaut. Envoyés par la boîte mail des demandes TMD, écrits à partir de leur modèle (Configuration > Emails > Modèles, type « Demandes TMD »).
+TmdSetupMailAck               = Accusé de réception
+TmdSetupMailAckHelp           = Au client, à la réception de sa demande : référence du ticket, échéance et lien de sa page de suivi.
+TmdSetupMailDone              = Demande traitée
+TmdSetupMailDoneHelp          = Au client, quand sa demande passe à Fait, avec le lien de sa page de suivi (et ses documents).
+TmdSetupMailLate              = Rappel des retards
+TmdSetupMailLateHelp          = Chaque matin, à la personne assignée : ses demandes en retard.
+TmdMailAckTemplate            = DoliTMD - Accusé de réception
+TmdMailDoneTemplate           = DoliTMD - Demande traitée
+TmdMailLateTemplate           = DoliTMD - Rappel des demandes en retard
+(TmdMailAckTemplate)          = DoliTMD - Accusé de réception
+(TmdMailDoneTemplate)         = DoliTMD - Demande traitée
+(TmdMailLateTemplate)         = DoliTMD - Rappel des demandes en retard
+TmdMailAckSent                = Accusé de réception envoyé à %s
+TmdMailDoneSent               = Mail « demande traitée » envoyé à %s
+TmdCronLate                   = DoliTMD : rappel des demandes en retard
+TmdCronLateComment            = Envoie chaque matin à la personne assignée la liste de ses demandes TMD en retard (si activé dans la configuration).
+TmdCronCatchUp         = DoliTMD : mails de la boîte TMD
+TmdCronCatchUpComment  = Récupère les nouveaux mails de la boîte TMD (Inbox), puis crée le ticket et la demande TMD de chaque mail qui n'en a pas encore (ou ajoute la réponse au ticket de sa demande).
+
+# Page de suivi publique
+TmdTrackId                    = Numéro de suivi
+TmdPublicTracking             = Suivi client
+TmdPublicTrackingHelp         = Le client suit sa demande sur cette page, sans compte : son état et les documents de l'onglet Documents. Le lien part dans les mails automatiques ; il ne s'ouvre qu'avec le numéro de suivi.
+TmdPublicPage                 = Page de suivi
+TmdPublicOpen                 = Ouvrir la page de suivi
+TmdPublicCopyLink             = Copier le lien
+TmdPublicDocumentsShared      = %s document(s) visible(s) par le client
+TmdPublicDocumentsNotice      = Les documents déposés ici sont visibles par le client sur sa page de suivi.
+TmdPublicTitle                = Suivi de votre demande
+TmdPublicTitleOf              = Suivi de la demande %s
+TmdPublicFormHelp             = Saisissez le numéro de suivi reçu par mail pour voir où en est votre demande et récupérer ses documents.
+TmdPublicFollow               = Suivre ma demande
+TmdPublicNotFound             = Aucune demande ne correspond à ce numéro de suivi. Vérifiez-le dans le mail que vous avez reçu.
+TmdPublicRequest              = Demande %s
+TmdPublicNoSubject            = Votre demande
+TmdPublicReceivedOn           = Reçue le %s
+TmdPublicStatePending         = En cours de traitement
+TmdPublicStateDone            = Traitée
+TmdPublicStateInvoiced        = Traitée et facturée
+TmdPublicStepReceived         = Demande reçue
+TmdPublicStepProcessing       = En cours de traitement
+TmdPublicStepDone             = Demande traitée
+TmdPublicDueBefore            = Prévue avant le %s
+TmdPublicReference            = Référence à rappeler
+TmdPublicDoneOn               = Traitée le
+TmdPublicDue                  = Traitement prévu avant le
+TmdPublicDocuments            = Documents de votre demande
+TmdPublicNoDocument           =Aucun document pour le moment : ils apparaîtront ici dès qu'ils seront prêts.
+TmdPublicContact              = Une question sur cette demande ? Écrivez-nous en gardant la référence %s dans l'objet du mail.
