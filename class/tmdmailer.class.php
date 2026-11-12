@@ -103,7 +103,8 @@ class TmdMailer
     }
 
     /**
-     * Scheduled job, every day: each person assigned gets the list of his late requests
+     * Scheduled job, every day: each person assigned gets the list of his late requests (the person « Assigned to » of
+     * the ticket and its other support users; the people of the setup when the ticket has none)
      *
      * @return int 0 if OK, < 0 if KO
      */
@@ -119,15 +120,20 @@ class TmdMailer
 
         $langs->load('dolitmd@dolitmd');
         $p    = $this->db->prefix();
-        $sql  = 'SELECT t.rowid, k.fk_user_assign FROM ' . $p . 'dolitmd_tmd AS t LEFT JOIN ' . $p . 'ticket AS k ON k.rowid = t.fk_ticket';
+        $sql  = 'SELECT t.rowid, t.fk_ticket, k.fk_user_assign FROM ' . $p . 'dolitmd_tmd AS t LEFT JOIN ' . $p . 'ticket AS k ON k.rowid = t.fk_ticket';
         $sql .= ' WHERE t.entity IN (' . getEntity('tmd') . ') AND t.status >= 0 AND t.done = 0 AND t.date_due IS NOT NULL';
         $sql .= " AND t.date_due < '" . $this->db->idate(dol_get_first_hour(dol_now())) . "' ORDER BY t.date_due ASC LIMIT 500";
         $rows = $this->db->getRows($sql);
 
-        $perUser = [];
+        require_once __DIR__ . '/tmdmailhandler.class.php';
+        $fallback = TmdMailHandler::assignUserIds($this->db);
+        $perUser  = [];
         foreach (is_array($rows) ? $rows : [] as $row) {
-            $userId = (int) $row->fk_user_assign > 0 ? (int) $row->fk_user_assign : getDolGlobalInt('DOLITMD_TICKET_USER');
-            if ($userId > 0) {
+            $userIds = $this->ticketUserIds((int) $row->fk_ticket);
+            if ((int) $row->fk_user_assign > 0) {
+                $userIds[] = (int) $row->fk_user_assign;
+            }
+            foreach (array_unique($userIds ?: $fallback) as $userId) {
                 $perUser[$userId][] = (int) $row->rowid;
             }
         }
@@ -145,6 +151,27 @@ class TmdMailer
         $this->output = $sent . ' reminder(s) sent' . ($this->error ? ', error: ' . $this->error : '');
 
         return $this->error ? -1 : 0;
+    }
+
+    /**
+     * Support users of a ticket (internal contacts « SUPPORTTEC »)
+     *
+     * @param  int   $ticketId Ticket
+     * @return int[]           Ids of the users
+     */
+    protected function ticketUserIds(int $ticketId): array
+    {
+        if ($ticketId <= 0) {
+            return [];
+        }
+        $p    = $this->db->prefix();
+        $sql  = 'SELECT ec.fk_socpeople FROM ' . $p . 'element_contact AS ec INNER JOIN ' . $p . 'c_type_contact AS tc ON tc.rowid = ec.fk_c_type_contact';
+        $sql .= " WHERE ec.element_id = " . $ticketId . " AND tc.element = 'ticket' AND tc.source = 'internal' AND tc.code = 'SUPPORTTEC' LIMIT 50";
+        $rows = $this->db->getRows($sql);
+
+        return array_map(static function ($r) {
+            return (int) $r->fk_socpeople;
+        }, is_array($rows) ? $rows : []);
     }
 
     /**

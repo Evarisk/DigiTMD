@@ -36,6 +36,7 @@ require_once DOL_DOCUMENT_ROOT . '/core/lib/admin.lib.php';
 // Load DoliTMD libraries
 require_once __DIR__ . '/../lib/dolitmd.lib.php';
 require_once __DIR__ . '/../class/tmdmailer.class.php';
+require_once __DIR__ . '/../class/tmdmailhandler.class.php';
 
 // Global variables definitions
 global $conf, $db, $langs, $user;
@@ -65,13 +66,16 @@ if ($action == 'set_config' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($mailboxId > 0 && !array_key_exists($mailboxId, $mailboxes)) {
         $mailboxId = 0;
     }
-    $assignUserId = GETPOSTINT('assign_user');
-    if ($assignUserId > 0) {
+    // People the tickets are assigned to (the first one of the list is « Assigned to » of the ticket): active internal
+    // users only
+    $assignUserIds = [];
+    foreach ((array) GETPOST('assign_user', 'array:int') as $assignUserId) {
         $assignUser = new User($db);
-        if ($assignUser->fetch($assignUserId) <= 0 || !empty($assignUser->socid) || empty($assignUser->statut)) {
-            $assignUserId = 0;
+        if ((int) $assignUserId > 0 && $assignUser->fetch((int) $assignUserId) > 0 && empty($assignUser->socid) && !empty($assignUser->statut)) {
+            $assignUserIds[] = (int) $assignUserId;
         }
     }
+    $assignUserIds = array_values(array_unique($assignUserIds));
     $delay     = max(0, min(365, GETPOSTINT('delay_days')));
     $productId = GETPOSTINT('invoice_product');
 
@@ -80,7 +84,7 @@ if ($action == 'set_config' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         dolibarr_set_const($db, 'DOLITMD_INBOX_SINCE', (string) dol_now(), 'chaine', 0, '', $conf->entity);
     }
     dolibarr_set_const($db, 'DOLITMD_INBOX_ACCOUNT', $mailboxId > 0 ? (string) $mailboxId : '', 'chaine', 0, '', $conf->entity);
-    dolibarr_set_const($db, 'DOLITMD_TICKET_USER', $assignUserId > 0 ? (string) $assignUserId : '', 'chaine', 0, '', $conf->entity);
+    dolibarr_set_const($db, 'DOLITMD_TICKET_USER', implode(',', $assignUserIds), 'chaine', 0, '', $conf->entity);
     dolibarr_set_const($db, 'DOLITMD_DELAY_DAYS', (string) $delay, 'chaine', 0, '', $conf->entity);
     if (GETPOSTISSET('invoice_product')) {
         dolibarr_set_const($db, 'DOLITMD_INVOICE_PRODUCT', $productId > 0 ? (string) $productId : '', 'chaine', 0, '', $conf->entity);
@@ -136,7 +140,7 @@ print '</tr>';
 
 print '<tr class="oddeven"><td><label for="assign_user">' . $langs->trans('TmdSetupAssignUser') . '</label></td>';
 print '<td>' . $langs->trans('TmdSetupAssignUserHelp') . '</td>';
-print '<td>' . img_picto('', 'user', 'class="pictofixedwidth"') . $form->select_dolusers(getDolGlobalInt('DOLITMD_TICKET_USER') ?: -1, 'assign_user', 1, null, 0, '', '', (string) $conf->entity, 0, 0, '', 0, '', 'minwidth300', 1) . '</td>';
+print '<td>' . img_picto('', 'user', 'class="pictofixedwidth"') . $form->select_dolusers(TmdMailHandler::assignUserIds($db), 'assign_user', 0, null, 0, '', '', (string) $conf->entity, 0, 0, '', 0, '', 'minwidth300 maxwidth400 widthcentpercentminusx', 1, 0, true) . '</td>';
 print '</tr>';
 print '</table>';
 

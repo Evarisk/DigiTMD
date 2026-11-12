@@ -25,7 +25,8 @@
 
 Chaque mail reçu dans la Réception de la boîte choisie dans la configuration (boîte du module Inbox) crée :
 
-- un **ticket** attribué à la personne choisie dans la configuration, avec le texte du mail, ses pièces jointes
+- un **ticket** attribué à la ou aux personnes choisies dans la configuration (la première de la liste dans
+  « Assigné à », toutes comme utilisateurs contact support du ticket), avec le texte du mail, ses pièces jointes
   (onglet Documents) et le mail lui-même (onglet Mails, lien Inbox) ;
 - le **tiers** du ticket : celui qui a l'adresse de l'expéditeur, sinon celui d'un contact qui a cette adresse
   (le contact est alors ajouté au ticket comme contact client) ;
@@ -82,7 +83,7 @@ Dolibarr) :
 - **Accusé de réception** au client à la réception (référence du ticket, échéance, lien de sa page de suivi), dans la
   conversation de son mail ;
 - **Demande traitée** au client quand la demande passe à Fait, avec le lien de sa page de suivi ;
-- **Rappel des retards**, chaque matin, à la personne assignée.
+- **Rappel des retards**, chaque matin, à chaque personne assignée au ticket.
 
 Les mails envoyés au client sont écrits dans les messages du ticket. L'ID nomeref, interne, n'est
 jamais proposé aux modèles.
@@ -104,7 +105,7 @@ Une demande peut aussi être saisie à la main (Nouvelle demande TMD).
 
 ### Configuration
 
-Configuration > Modules > DoliTMD : la boîte mail des demandes TMD et la personne à qui les tickets sont attribués.
+Configuration > Modules > DoliTMD : la boîte mail des demandes TMD et les personnes à qui les tickets sont attribués.
 
 ## Traductions
 
