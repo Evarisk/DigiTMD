@@ -3,13 +3,19 @@
 ## Informations
 
 - Numéro du module : 436303
-- Version : 1.1.0
 - Dernière mise à jour : 12/11/2026
 - Éditeur : [Evarisk](https://www.evarisk.com)
-- Compatibilité : Dolibarr 20+ ; modules Saturne, Tiers, Tickets ; module Inbox pour la réception des mails
+- Modules requis : Saturne, Tiers, Tickets ; module Inbox pour la réception des mails
 - Thème : eldy (thème moderne de Saturne)
 - Licence : GPLv3
 - Disponible sur : Windows - MacOS - Linux
+
+### Version
+
+- Version : 23.0.0
+- PHP : 7.4.33
+- Compatibilité : Dolibarr 23.0.0 - 24.0.0
+- Saturne Framework : 23.7.0
 
 ## Liens
 
@@ -122,7 +128,7 @@ Configuration > Modules > DoliTMD : la boîte mail des demandes TMD et les perso
 
 ### Méthode 2 :
 
-- Dans le dossier "dolibarr/htdocs/custom" copier la ligne suivante :
-``` 
-git clone https://github.com/Evarisk/DoliTMD.git
+- Dans le dossier "dolibarr/htdocs/custom" copier la ligne suivante (le dossier doit s'appeler `dolitmd`) :
+```
+git clone https://github.com/Evarisk/DigiTMD.git dolitmd
 ```
