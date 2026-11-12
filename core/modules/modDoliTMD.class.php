@@ -33,6 +33,11 @@ require_once DOL_DOCUMENT_ROOT . '/core/modules/DolibarrModules.class.php';
 class modDoliTMD extends DolibarrModules
 {
     /**
+     * @var int[] Minimum version of Saturne required by module, same format as need_dolibarr_version: checked by init() and by the Saturne index page
+     */
+    public $need_saturne_version = [23, 7];
+
+    /**
      * Constructor. Define names, constants, directories, boxes, permissions
      *
      * @param DoliDB $db Database handler
@@ -61,7 +66,8 @@ class modDoliTMD extends DolibarrModules
         $this->descriptionlong = $langs->trans('DoliTMDDescriptionLong');
         $this->editor_name     = 'Evarisk';
         $this->editor_url      = 'https://www.evarisk.com';
-        $this->version         = '1.1.0';
+        // Same numbering as the other modules of Evarisk: the major one is the version of Dolibarr it is made for
+        $this->version         = '23.0.0';
         $this->const_name      = 'MAIN_MODULE_' . strtoupper($this->name);
         $this->picto           = 'dolitmd_color@dolitmd';
 
@@ -97,7 +103,7 @@ class modDoliTMD extends DolibarrModules
         $this->conflictwith     = [];
         $this->langfiles        = ['dolitmd@dolitmd'];
         $this->phpmin           = [7, 4];
-        $this->need_dolibarr_version   = [20, 0];
+        $this->need_dolibarr_version   = [23, 0];
         $this->warnings_activation     = [];
         $this->warnings_activation_ext = [];
 
@@ -254,7 +260,17 @@ class modDoliTMD extends DolibarrModules
      */
     public function init($options = ''): int
     {
-        global $conf;
+        global $conf, $langs;
+
+        // Saturne ships separately: refuse one older than need_saturne_version, it lacks functions this release calls
+        require_once DOL_DOCUMENT_ROOT . '/core/lib/admin.lib.php';
+        dol_include_once('/saturne/core/modules/modSaturne.class.php');
+        $saturneVersion = class_exists('modSaturne') ? (new modSaturne($this->db))->version : '';
+        if (versioncompare(explode('.', $saturneVersion), $this->need_saturne_version) < 0) {
+            $langs->load('admin'); // activateModuleDependNotSatisfied, not loaded when the Saturne index page runs init()
+            $this->error = $langs->trans('activateModuleDependNotSatisfied', $this->name, 'modSaturne >= ' . versiontostring($this->need_saturne_version) . ' (' . ($saturneVersion ?: '-') . ')', $this->name);
+            return -1;
+        }
 
         $result = $this->_load_tables('/dolitmd/sql/');
         if ($result < 0) {

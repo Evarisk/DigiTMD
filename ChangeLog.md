@@ -1,6 +1,9 @@
 # CHANGELOG dolitmd FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
-## 1.1.0
+## 23.0.0
+
+- Numérotation des autres modules Evarisk : la version majeure suit celle de Dolibarr (23), Dolibarr 23.0 minimum,
+  Saturne 23.7 minimum (refusé à l'activation sinon).
 
 - Demandes TMD reçues par mail : un mail reçu sur la boîte TMD (module Inbox) crée un ticket attribué à la personne
   de la configuration, lié au tiers ou au contact de l'expéditeur, avec ses pièces jointes, et une demande TMD.
