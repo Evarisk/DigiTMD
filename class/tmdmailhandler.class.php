@@ -87,6 +87,28 @@ class TmdMailHandler
     }
 
     /**
+     * People the tickets are assigned to (setup, comma separated), in their order, active internal users only
+     *
+     * @param  DoliDB $db Database handler
+     * @return int[]      Ids of the users, the first one first
+     */
+    public static function assignUserIds(DoliDB $db): array
+    {
+        $out = [];
+        foreach (array_unique(array_map('intval', explode(',', getDolGlobalString('DOLITMD_TICKET_USER')))) as $userId) {
+            if ($userId <= 0) {
+                continue;
+            }
+            $assignUser = new User($db);
+            if ($assignUser->fetch($userId) > 0 && !empty($assignUser->statut) && empty($assignUser->socid)) {
+                $out[] = $userId;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Mails of a mailbox received: a ticket and a request for each one (trigger INBOX_MAIL_RECEIVED)
      *
      * @param  object $mailbox Mailbox (InboxAccount or its row: id or rowid, email)
@@ -442,10 +464,10 @@ class TmdMailHandler
         if ($user->id > 0) {
             return $user;
         }
-        $assignId = getDolGlobalInt('DOLITMD_TICKET_USER');
-        if ($assignId > 0) {
+        $assignees = self::assignUserIds($this->db);
+        if (!empty($assignees)) {
             $author = new User($this->db);
-            if ($author->fetch($assignId) > 0) {
+            if ($author->fetch($assignees[0]) > 0) {
                 return $author;
             }
         }
@@ -517,13 +539,11 @@ class TmdMailHandler
         $ticket->entity         = $conf->entity;
         $ticket->notify_tiers_at_create = getDolGlobalInt('TICKET_CHECK_NOTIFY_THIRDPARTY_AT_CREATION');
 
-        $assignId = getDolGlobalInt('DOLITMD_TICKET_USER');
-        if ($assignId > 0) {
-            $assignUser = new User($this->db);
-            if ($assignUser->fetch($assignId) > 0 && !empty($assignUser->statut)) {
-                $ticket->fk_user_assign = $assignId;
-                $ticket->status         = Ticket::STATUS_ASSIGNED;
-            }
+        // Several people: the first one is « Assigned to » of the ticket, all of them are its support users (tab Contacts)
+        $assignees = self::assignUserIds($this->db);
+        if (!empty($assignees)) {
+            $ticket->fk_user_assign = $assignees[0];
+            $ticket->status         = Ticket::STATUS_ASSIGNED;
         }
         if (empty($ticket->fk_user_assign)) {
             $ticket->status = Ticket::STATUS_NOT_READ;
@@ -544,6 +564,12 @@ class TmdMailHandler
 
         if ($contactId > 0 && $ticket->add_contact($contactId, 'SUPPORTCLI', 'external') < 0) {
             dol_syslog(__METHOD__ . ' contact ' . $contactId . ' not added to ticket ' . $ticket->id . ': ' . $ticket->error, LOG_WARNING);
+        }
+        // The other people assigned: support users of the ticket too (the first one is added by Ticket::create())
+        foreach (array_slice($assignees, 1) as $userId) {
+            if ($ticket->add_contact($userId, 'SUPPORTTEC', 'internal') < 0) {
+                dol_syslog(__METHOD__ . ' user ' . $userId . ' not added to ticket ' . $ticket->id . ': ' . $ticket->error, LOG_WARNING);
+            }
         }
 
         return $ticket;

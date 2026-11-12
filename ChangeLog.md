@@ -22,6 +22,8 @@
 - Tâche planifiée (toutes les 5 minutes) qui récupère les nouveaux mails de la boîte TMD et les traite ; le
   déclencheur INBOX_MAIL_RECEIVED est prêt mais désactivé tant que le module Inbox ne l'envoie pas.
 - Lien vers la facture d'une demande facturée dans la colonne Suivi de la liste.
+- Tickets attribués à plusieurs personnes à la fois (la première dans « Assigné à », toutes comme utilisateurs contact
+  support du ticket) ; le rappel des retards part à chacune.
 
 ## 1.0
 
