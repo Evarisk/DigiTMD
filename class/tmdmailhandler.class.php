@@ -109,6 +109,55 @@ class TmdMailHandler
     }
 
     /**
+     * Hosts closing the Message-ID of the mails sent by this Dolibarr (CMailFile: <uniqid>.<mode>-dolibarr-<trackid>@<host>,
+     * the host being dol_getprefix('email')), in each way Dolibarr may have computed it: prefix of the setup, unique id
+     * of the instance or its paths, sent from a page or from a scheduled job
+     *
+     * @return string[] Hosts, in lower case
+     */
+    public static function ownMailHosts(): array
+    {
+        global $conf, $dolibarr_main_url_root;
+
+        $hosts  = [dol_getprefix('email')];
+        $prefix = getDolGlobalString('MAIL_PREFIX_FOR_EMAIL_ID');
+        if ($prefix === 'SERVER_NAME') {
+            $hosts[] = (string) parse_url((string) $dolibarr_main_url_root, PHP_URL_HOST);
+        } elseif ($prefix !== '') {
+            $hosts[] = $prefix;
+        }
+        if (!empty($conf->file->instance_unique_id)) {
+            $hosts[] = sha1('dolibarr' . $conf->file->instance_unique_id);
+        }
+        $hosts[] = sha1(DOL_DOCUMENT_ROOT . DOL_URL_ROOT);
+
+        return array_values(array_unique(array_filter(array_map('strtolower', $hosts))));
+    }
+
+    /**
+     * Mail sent by this very Dolibarr: notification of a new ticket, acknowledgement of a request, answer written from a
+     * ticket. Never a request: received again on the mailbox, the notification of the ticket of a request would make
+     * another request, whose own notification would make another one (issue #29)
+     *
+     * @param  string $messageId Message-ID
+     * @return bool
+     */
+    public static function isOwnMail(string $messageId): bool
+    {
+        $messageId = strtolower(trim($messageId, " \t\r\n<>"));
+        if (strpos($messageId, '-dolibarr-') === false) {
+            return false;
+        }
+        foreach (self::ownMailHosts() as $host) {
+            if (substr($messageId, -strlen('@' . $host)) === '@' . $host) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Mails of a mailbox received: a ticket and a request for each one (trigger INBOX_MAIL_RECEIVED)
      *
      * @param  object $mailbox Mailbox (InboxAccount or its row: id or rowid, email)
@@ -161,9 +210,9 @@ class TmdMailHandler
             return 0;
         }
 
-        // Never a request: a mail of the mailbox itself, a report of a mail server
+        // Never a request: a mail of the mailbox itself, a report of a mail server, a mail sent by this Dolibarr
         $fromEmail = strtolower(trim((string) $row->from_email));
-        if ($fromEmail === strtolower(trim((string) ($mailbox->email ?? ''))) || preg_match('/^(mailer-daemon|postmaster)@/i', $fromEmail)) {
+        if ($fromEmail === strtolower(trim((string) ($mailbox->email ?? ''))) || preg_match('/^(mailer-daemon|postmaster)@/i', $fromEmail) || self::isOwnMail($messageId)) {
             return 0;
         }
 
@@ -374,6 +423,10 @@ class TmdMailHandler
         // Never kept as requests (handleMail()): left out here, so that they never take the place of the others
         $sql  .= " AND LOWER(COALESCE(m.from_email, '')) <> '" . $this->db->escape(strtolower((string) $mailbox->email)) . "'";
         $sql  .= " AND LOWER(COALESCE(m.from_email, '')) NOT LIKE 'mailer-daemon@%' AND LOWER(COALESCE(m.from_email, '')) NOT LIKE 'postmaster@%'";
+        foreach (self::ownMailHosts() as $host) {
+            $host  = $this->db->escape($this->db->escapeforlike($host));
+            $sql  .= " AND LOWER(m.message_id) NOT LIKE '%-dolibarr-%@" . $host . "' AND LOWER(m.message_id) NOT LIKE '%-dolibarr-%@" . $host . ">'";
+        }
         // Only the mails received since the mailbox was chosen: never the history of the mailbox
         $sql  .= " AND m.date_received >= '" . $this->db->idate($since > 0 ? $since : dol_now()) . "'";
         $sql  .= ' ORDER BY m.date_received ASC LIMIT 50';
