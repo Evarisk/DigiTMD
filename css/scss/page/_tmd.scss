@@ -241,6 +241,169 @@ body#mainbody .saturne-kpi-card.saturne-kpi-card-red {
   line-height: 18px;
 }
 
+// Unknown sender: its address, cut when long, then the button « + » that creates its thirdparty, always visible
+.dolitmd-sender {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  vertical-align: middle;
+
+  .dolitmd-sender-email {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.dolitmd-sender-create,
+body#mainbody .dolitmd-sender-create {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px dashed var(--saturne-border-strong, #cbd5e1);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--saturne-muted, #64748b);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+
+  &:hover {
+    border-style: solid;
+    border-color: $dt-accent;
+    background: rgba(230, 126, 34, .1);
+    color: $dt-accent;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--saturne-ring, rgba(37, 99, 235, .2));
+  }
+}
+
+// Modal of the thirdparty: a name to type, the address it takes
+.wpeo-modal.dolitmd-soc-modal {
+  .modal-container {
+    max-width: 640px;
+    height: auto;
+    max-height: calc(100% - 4em);
+  }
+
+  .modal-container .modal-header,
+  .modal-container .modal-footer {
+    flex: none;
+    height: auto;
+  }
+
+  .modal-container .modal-header {
+    padding-bottom: 12px;
+  }
+
+  // The fields scroll on a low window, the header and the buttons stay
+  .modal-container .modal-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+
+  .modal-title .fa-building {
+    color: $dt-accent;
+  }
+
+  // Two columns of fields, one on a phone
+  .dolitmd-soc-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
+    margin: 0;
+
+    @media (max-width: 600px) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .dolitmd-soc-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+
+    > label {
+      font-weight: 600;
+    }
+
+    > label.fieldrequired::after {
+      content: ' *';
+      color: var(--saturne-danger, #dc2626);
+    }
+
+    // Whatever the helpers of the core give them as width, select2 included (fixed at its start, 200px on a phone)
+    input,
+    select,
+    textarea,
+    .select2-container {
+      width: 100% !important;
+      max-width: none !important;
+      box-sizing: border-box;
+      margin: 0;
+    }
+
+    // select2 copies the classes of the select (maxwidth200onsmartphone of the country) to its box
+    .select2-selection {
+      max-width: none !important;
+    }
+
+    textarea {
+      resize: vertical;
+    }
+  }
+
+  .dolitmd-soc-field--full,
+  .dolitmd-soc-help,
+  .dolitmd-soc-error {
+    grid-column: 1 / -1;
+  }
+
+  .dolitmd-soc-name {
+    font-size: 15px;
+  }
+
+  .dolitmd-soc-help {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .dolitmd-soc-error {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--saturne-danger-soft, #fee2e2);
+    color: var(--saturne-danger, #dc2626);
+
+    // The theme hides a div.hidden, never a button.hidden
+    &.hidden,
+    .dolitmd-soc-link.hidden {
+      display: none;
+    }
+  }
+}
+
 // Column of the identifier of the TMD software: stands out as the reference to type
 .mod-tmd td[data-colkey="software_ref"] .contenteditable:empty::before {
   content: '—';
