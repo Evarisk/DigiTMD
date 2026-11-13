@@ -46,6 +46,10 @@ window.dolitmd.tmd.init = function() {
 window.dolitmd.tmd.event = function() {
   $(document).on('change', '.dolitmd-flag-input', window.dolitmd.tmd.saveFlag);
   $(document).on('change', '.dolitmd-state', window.dolitmd.tmd.saveState);
+  $(document).on('click', '.dolitmd-sender-create', window.dolitmd.tmd.openThirdpartyModal);
+  $(document).on('submit', '.dolitmd-soc-form', window.dolitmd.tmd.createThirdparty);
+  $(document).on('click', '.dolitmd-soc-link', window.dolitmd.tmd.linkThirdparty);
+  $(document).on('keydown', '.select2-container, .dolitmd-soc-modal', window.dolitmd.tmd.thirdpartyModalEscape);
 };
 
 /**
@@ -167,4 +171,147 @@ window.dolitmd.tmd.refresh = function(answer) {
   if ($('.dolitmd-flag-input[data-id="' + answer.id + '"]').closest('.fichecenter').length) {
     $('.statusref').first().html(answer.status);
   }
+};
+
+/**
+ * Button « + » of an unknown sender: the modal, filled with its address and the name proposed
+ *
+ * @returns {void}
+ */
+window.dolitmd.tmd.openThirdpartyModal = function() {
+  const button = $(this);
+  const modal  = $('#dolitmd-soc-modal');
+
+  // Fields of the previous sender emptied, country and type back to their default
+  modal.find('.dolitmd-soc-form')[0].reset();
+  // The selects are drawn by select2 on these pages: shown again with the value the reset gave them
+  modal.find('select').trigger('change.select2');
+  modal.data('id', button.data('id')).removeData('socid');
+  modal.find('.dolitmd-soc-email').val(button.data('email') || '');
+  modal.find('.dolitmd-soc-name').val(button.data('name') || '');
+  window.dolitmd.tmd.thirdpartyError(modal, '', null);
+  window.dolitmd.tmd.thirdpartySaving(modal, false);
+  modal.addClass('modal-active');
+  modal.find('.dolitmd-soc-name').trigger('focus').trigger('select');
+};
+
+/**
+ * Escape closes the modal of the thirdparty, a field focused or not (Saturne would not close it then), but an Escape
+ * that only closed a list of the modal (select2, autocompletion of the zip code: they prevent its default) leaves it
+ * open with the fields typed
+ *
+ * @param   {KeyboardEvent} event Key pressed
+ * @returns {void}
+ */
+window.dolitmd.tmd.thirdpartyModalEscape = function(event) {
+  const modal = $('#dolitmd-soc-modal');
+  if (event.key !== 'Escape' || !modal.hasClass('modal-active')) {
+    return;
+  }
+
+  // Saturne handles Escape on the whole page: this one is done
+  event.stopPropagation();
+  if (!event.isDefaultPrevented()) {
+    modal.removeClass('modal-active');
+  }
+};
+
+/**
+ * Error of the modal of the thirdparty, with the thirdparty of the same name to link instead
+ *
+ * @param   {jQuery}      modal    Modal
+ * @param   {string}      message  Error, empty to hide it
+ * @param   {Object|null} existing Thirdparty of the same name: id and label of its button
+ * @returns {void}
+ */
+window.dolitmd.tmd.thirdpartyError = function(modal, message, existing) {
+  const link = modal.find('.dolitmd-soc-link');
+
+  modal.find('.dolitmd-soc-error').toggleClass('hidden', !message);
+  modal.find('.dolitmd-soc-error-text').text(message || '');
+  link.toggleClass('hidden', !existing);
+  link.find('.dolitmd-soc-link-label').text(existing ? existing.label : '');
+  if (existing) {
+    modal.data('socid', existing.id);
+  } else {
+    modal.removeData('socid');
+  }
+};
+
+/**
+ * Buttons of the modal of the thirdparty blocked while it is saved
+ *
+ * @param   {jQuery}  modal  Modal
+ * @param   {boolean} saving Being saved
+ * @returns {void}
+ */
+window.dolitmd.tmd.thirdpartySaving = function(modal, saving) {
+  modal.find('.dolitmd-soc-save, .dolitmd-soc-link').prop('disabled', saving).toggleClass('button-disable', saving);
+};
+
+/**
+ * Fields filled: the thirdparty created with them
+ *
+ * @param   {SubmitEvent} event Submit of the form of the modal
+ * @returns {void}
+ */
+window.dolitmd.tmd.createThirdparty = function(event) {
+  event.preventDefault();
+  const modal  = $('#dolitmd-soc-modal');
+  const fields = {};
+
+  // A multiple choice (custcats[]) goes as a list, sent back as custcats[]=1&custcats[]=2
+  $.each($(this).serializeArray(), function(index, field) {
+    if (field.name.slice(-2) === '[]') {
+      const name = field.name.slice(0, -2);
+      fields[name] = (fields[name] || []).concat(field.value);
+    } else {
+      fields[field.name] = field.value;
+    }
+  });
+  window.dolitmd.tmd.sendThirdparty(modal, fields);
+};
+
+/**
+ * Name taken: the request linked to the thirdparty of this name
+ *
+ * @returns {void}
+ */
+window.dolitmd.tmd.linkThirdparty = function() {
+  const modal = $('#dolitmd-soc-modal');
+
+  window.dolitmd.tmd.sendThirdparty(modal, {socid: modal.data('socid')});
+};
+
+/**
+ * Send the thirdparty of the modal; the answer puts it on the requests of the address (list or card)
+ *
+ * @param   {jQuery} modal Modal
+ * @param   {Object} data  Name typed, or thirdparty chosen
+ * @returns {void}
+ */
+window.dolitmd.tmd.sendThirdparty = function(modal, data) {
+  window.dolitmd.tmd.thirdpartySaving(modal, true);
+
+  $.ajax({
+    url: modal.data('url'),
+    type: 'POST',
+    dataType: 'json',
+    data: $.extend({action: 'create_thirdparty', id: modal.data('id'), token: window.dolitmd.tmd.token()}, data)
+  }).done(function(answer) {
+    if (!answer || !answer.success) {
+      window.dolitmd.tmd.thirdpartySaving(modal, false);
+      window.dolitmd.tmd.thirdpartyError(modal, (answer && answer.error) || modal.data('error'), answer && answer.existing);
+      return;
+    }
+    $.each(answer.ids || [], function(index, id) {
+      $('.dolitmd-sender[data-id="' + id + '"]').replaceWith(answer.thirdparty);
+    });
+    modal.removeClass('modal-active');
+    window.dolitmd.tmd.notify(answer.message, false);
+  }).fail(function(xhr) {
+    const answer = xhr.responseJSON || {};
+    window.dolitmd.tmd.thirdpartySaving(modal, false);
+    window.dolitmd.tmd.thirdpartyError(modal, answer.error || modal.data('error'), answer.existing || null);
+  });
 };
