@@ -58,6 +58,12 @@ class Tmd extends SaturneObject
     public $isextrafieldmanaged = 0;
 
     /**
+     * @var int<0,1> Does object support category module ? 0 = No, 1 = Yes
+     *               No: the module declares no tag type, there is no table categorie_tmd (Saturne defaults to 1)
+     */
+    public int $isCategoryManaged = 0;
+
+    /**
      * @var string Field linking a line to its request: read by the list of the files of the tab Documents
      *             (core/tpl/ajaxrow.tpl.php warns when it is empty), a request has no line
      */
