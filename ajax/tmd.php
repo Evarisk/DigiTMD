@@ -82,7 +82,7 @@ function dolitmd_ajax_reply(int $httpCode, array $data): void
 
 // Writing only: a POST (the token is checked by main.inc.php), by a user allowed to modify the TMD requests
 $action = GETPOST('action', 'aZ09');
-if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !in_array($action, ['set_flag', 'set_state'], true)) {
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !in_array($action, ['set_flag', 'set_state', 'create_thirdparty'], true)) {
     dolitmd_ajax_reply(400, ['success' => false, 'error' => 'BadRequest']);
 }
 if (!empty($user->socid) || !$user->hasRight('dolitmd', 'tmd', 'write')) {
@@ -94,6 +94,105 @@ $id = GETPOSTINT('id');
 $object = new Tmd($db);
 if ($id <= 0 || $object->fetch($id) <= 0 || (int) $object->status === Tmd::STATUS_DELETED || !in_array((int) $object->entity, array_map('intval', explode(',', getEntity($object->element))), true)) {
     dolitmd_ajax_reply(404, ['success' => false, 'error' => $langs->transnoentities('ErrorRecordNotFound')]);
+}
+
+if ($action == 'create_thirdparty') {
+    // Thirdparty of an unknown sender (modal of the list and of the card): created with the address, or the one chosen
+    // when the name is taken already; then on the requests of the address and on their tickets
+    require_once DOL_DOCUMENT_ROOT . '/societe/class/societe.class.php';
+    require_once __DIR__ . '/../class/tmdmailhandler.class.php';
+
+    global $mysoc;
+
+    $langs->loadLangs(['errors', 'companies']);
+
+    if (!empty($object->fk_soc)) {
+        dolitmd_ajax_reply(409, ['success' => false, 'error' => $langs->transnoentities('TmdSenderAlreadyLinked')]);
+    }
+    $email = strtolower(trim((string) $object->email_from));
+    if (!isValidEmail($email)) {
+        dolitmd_ajax_reply(400, ['success' => false, 'error' => $langs->transnoentities('ErrorBadEMail', $email)]);
+    }
+
+    $thirdparty = new Societe($db);
+    $socId      = GETPOSTINT('socid');
+    $contactId  = 0;
+    $created    = false;
+    if ($socId > 0) {
+        // The thirdparty of the same name, chosen in the modal
+        if (!$user->hasRight('societe', 'lire') || $thirdparty->fetch($socId) <= 0 || !in_array((int) $thirdparty->entity, array_map('intval', explode(',', getEntity('societe'))), true)) {
+            dolitmd_ajax_reply(404, ['success' => false, 'error' => $langs->transnoentities('ErrorRecordNotFound')]);
+        }
+    } else {
+        if (!dolitmd_can_create_thirdparty($user)) {
+            dolitmd_ajax_reply(403, ['success' => false, 'error' => $langs->transnoentities('NotEnoughPermissions')]);
+        }
+        // The address got a thirdparty or a contact since the mail came: that one, never a second
+        [$socId, $contactId] = (new TmdMailHandler($db))->findSender($email);
+        if ($socId <= 0) {
+            $name = dol_substr(trim(GETPOST('name', 'alphanohtml')), 0, 128);
+            if ($name === '') {
+                dolitmd_ajax_reply(400, ['success' => false, 'error' => $langs->transnoentities('ErrorFieldRequired', $langs->transnoentities('ThirdPartyName'))]);
+            }
+            // The fields of the modal, read as societe/card.php reads them
+            $socEmail = trim(GETPOST('email', 'custom', 0, FILTER_SANITIZE_EMAIL));
+            if ($socEmail !== '' && !isValidEmail($socEmail)) {
+                dolitmd_ajax_reply(400, ['success' => false, 'error' => $langs->transnoentities('ErrorBadEMail', $socEmail)]);
+            }
+            $socClient = GETPOSTISSET('client') ? GETPOSTINT('client') : 1;
+            // A thirdparty has this name already: the modal offers it instead of a duplicate
+            $same = $db->getRow('SELECT rowid FROM ' . $db->prefix() . 'societe WHERE entity IN (' . getEntity('societe') . ") AND LOWER(nom) = '" . $db->escape(dol_strtolower($name)) . "' ORDER BY status DESC, rowid ASC");
+            if (is_object($same) && $thirdparty->fetch((int) $same->rowid) > 0) {
+                dolitmd_ajax_reply(409, [
+                    'success'  => false,
+                    'error'    => $langs->transnoentities('TmdThirdpartyNameExists', $thirdparty->name),
+                    'existing' => ['id' => (int) $thirdparty->id, 'label' => $langs->transnoentities('TmdLinkToThirdparty', $thirdparty->name)],
+                ]);
+            }
+
+            $thirdparty->name        = $name;
+            $thirdparty->client      = in_array($socClient, [0, 1, 2, 3], true) ? $socClient : 1;
+            $thirdparty->code_client = $thirdparty->client > 0 ? -1 : '';
+            $thirdparty->status      = 1;
+            $thirdparty->address     = GETPOST('address', 'alphanohtml');
+            $thirdparty->zip         = GETPOST('zipcode', 'alphanohtml');
+            $thirdparty->town        = GETPOST('town', 'alphanohtml');
+            $thirdparty->country_id  = GETPOSTINT('country_id') > 0 ? GETPOSTINT('country_id') : (int) $mysoc->country_id;
+            $thirdparty->email       = $socEmail;
+            $thirdparty->phone       = GETPOST('phone', 'alpha');
+            $thirdparty->tva_intra   = GETPOST('tva_intra', 'alphanohtml');
+            for ($i = 1; $i <= 6; $i++) {
+                if (GETPOSTISSET('idprof' . $i)) {
+                    $thirdparty->{'idprof' . $i} = GETPOST('idprof' . $i, 'alphanohtml');
+                }
+            }
+            if ($thirdparty->create($user) <= 0) {
+                dolitmd_ajax_reply(500, ['success' => false, 'error' => trim($thirdparty->error . ' ' . implode(' ', (array) $thirdparty->errors)) ?: $langs->transnoentities('TmdThirdpartyError')]);
+            }
+            $socId   = (int) $thirdparty->id;
+            $created = true;
+
+            // Tags of the customers and prospects, as societe/card.php sets them once the thirdparty is created
+            $socTags = GETPOST('custcats', 'array:int');
+            if (!empty($socTags) && isModEnabled('category') && $user->hasRight('categorie', 'lire') && $thirdparty->setCategories($socTags, 'customer') < 0) {
+                dol_syslog('dolitmd ajax/tmd.php: tags of thirdparty ' . $socId . ' not set: ' . $thirdparty->error, LOG_WARNING);
+            }
+        } elseif ($thirdparty->fetch($socId) <= 0) {
+            dolitmd_ajax_reply(404, ['success' => false, 'error' => $langs->transnoentities('ErrorRecordNotFound')]);
+        }
+    }
+
+    $ids = $object->linkSenderThirdparty($user, $socId, $contactId);
+    if ($ids === false) {
+        dolitmd_ajax_reply(500, ['success' => false, 'error' => $object->error ?: $langs->transnoentities('TmdThirdpartyError')]);
+    }
+
+    dolitmd_ajax_reply(200, [
+        'success'    => true,
+        'ids'        => $ids,
+        'thirdparty' => $thirdparty->getNomUrl(1),
+        'message'    => $langs->transnoentities($created ? 'TmdThirdpartyCreated' : 'TmdThirdpartyLinked', $thirdparty->name, count($ids)),
+    ]);
 }
 
 if ($action == 'set_state') {
