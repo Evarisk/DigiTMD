@@ -277,7 +277,8 @@ class ActionsDolitmd
     }
 
     /**
-     * Mass change of state, once confirmed: each request checked takes the state (its ticket follows)
+     * Mass change of state, once confirmed: each request checked takes the state (its ticket follows). On the card of
+     * the ticket of a request: the reply-to address of its messages
      *
      * @param  array        $parameters Hook metadata (context, etc...)
      * @param  CommonObject $object     Current object
@@ -288,6 +289,10 @@ class ActionsDolitmd
     {
         global $langs, $user;
 
+        if (is_object($object) && $object->element === 'ticket') {
+            $this->setTicketReplyTo($object);
+            return 0;
+        }
         if (!is_object($object) || $object->element !== 'tmd' || !in_array($action, ['tmd_set_state', 'tmd_create_invoices'], true) || GETPOST('confirm', 'alpha') !== 'yes') {
             return 0;
         }
@@ -334,6 +339,35 @@ class ActionsDolitmd
         }
 
         return 0;
+    }
+
+    /**
+     * Ticket of a TMD request (card of the ticket): the messages written from it give the TMD mailbox as reply-to
+     * address, instead of the one of the module Ticket (the same for every ticket). The answers of the customer come
+     * back to that mailbox, where DoliTMD adds them to the ticket (its Message-ID). The sender is kept: the mail leaves
+     * by the mail server of Dolibarr, an address of another mailbox as sender would be taken for a forgery
+     *
+     * @param  CommonObject $ticket Ticket of the card
+     * @return void
+     */
+    protected function setTicketReplyTo($ticket): void
+    {
+        global $conf;
+
+        require_once __DIR__ . '/tmdmailhandler.class.php';
+
+        if (empty($ticket->id) || !isModEnabled('dolitmd')) {
+            return;
+        }
+        $mailbox = TmdMailHandler::configuredMailbox($this->db);
+        if ($mailbox === null || !isValidEmail((string) $mailbox->email)) {
+            return;
+        }
+        $request = $this->db->getRow('SELECT rowid FROM ' . $this->db->prefix() . 'dolitmd_tmd WHERE fk_ticket = ' . ((int) $ticket->id) . ' AND entity IN (' . getEntity('tmd') . ') AND status >= 0');
+        if (is_object($request)) {
+            // For this page only: never saved
+            $conf->global->TICKET_NOTIFICATION_EMAIL_REPLYTO = (string) $mailbox->email;
+        }
     }
 
     /**
