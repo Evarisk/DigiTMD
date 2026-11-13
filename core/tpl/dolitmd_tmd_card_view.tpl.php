@@ -94,3 +94,8 @@ if (empty($resHook)) {
     print dolGetButtonAction('<i class="fas fa-trash pictofixedwidth"></i>' . $langs->trans('Delete'), '', 'delete', $_SERVER['PHP_SELF'] . '?id=' . $object->id . '&action=delete&token=' . newToken(), '', $permissiontodelete);
 }
 print '</div>';
+
+// Unknown sender: the modal of the button « + » of its address
+if (empty($object->fk_soc) && !empty($object->email_from) && dolitmd_can_create_thirdparty($user)) {
+    include __DIR__ . '/dolitmd_thirdparty_create_modal.tpl.php';
+}

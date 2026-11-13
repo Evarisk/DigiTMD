@@ -223,6 +223,78 @@ function dolitmd_state_html(Tmd $object, bool $canWrite): string
 }
 
 /**
+ * The user may create the thirdparty of an unknown sender from the list or the card of the requests
+ *
+ * @param  User $user User
+ * @return bool
+ */
+function dolitmd_can_create_thirdparty(User $user): bool
+{
+    return isModEnabled('societe') && empty($user->socid) && $user->hasRight('societe', 'creer') && $user->hasRight('dolitmd', 'tmd', 'write');
+}
+
+/**
+ * Sender of a request without thirdparty: its address, then the button that creates its thirdparty (modal of
+ * core/tpl/dolitmd_thirdparty_create_modal.tpl.php, js/modules/tmd.js)
+ *
+ * @param  Tmd    $object    TMD request
+ * @param  bool   $canCreate The user may create the thirdparty
+ * @return string            HTML of the sender
+ */
+function dolitmd_sender_html(Tmd $object, bool $canCreate): string
+{
+    global $langs;
+
+    $email = (string) $object->email_from;
+
+    $out  = '<span class="dolitmd-sender" data-id="' . ((int) $object->id) . '">';
+    $out .= '<span class="dolitmd-sender-email opacitymedium classfortooltip" title="' . dol_escape_htmltag($langs->transnoentities('TmdUnknownSender')) . '">';
+    $out .= img_picto('', 'email', 'class="pictofixedwidth"') . dol_escape_htmltag($email) . '</span>';
+    if ($canCreate && (int) $object->status !== Tmd::STATUS_DELETED) {
+        $out .= '<button type="button" class="dolitmd-sender-create classfortooltip" title="' . dol_escape_htmltag($langs->transnoentities('TmdCreateThirdpartyHelp')) . '"';
+        $out .= ' data-id="' . ((int) $object->id) . '" data-email="' . dol_escape_htmltag($email) . '" data-name="' . dol_escape_htmltag(dolitmd_sender_company_name($object)) . '"';
+        $out .= ' aria-label="' . dol_escape_htmltag($langs->transnoentities('TmdCreateThirdparty')) . '"><i class="fas fa-plus"></i></button>';
+    }
+    $out .= '</span>';
+
+    return $out;
+}
+
+/**
+ * Name proposed for the thirdparty of a sender: the domain of a company address (kleterrier@staci.com → STACI), the
+ * name the sender gave for an address of a mail provider
+ *
+ * @param  Tmd    $object TMD request
+ * @return string         Name, empty when none
+ */
+function dolitmd_sender_company_name(Tmd $object): string
+{
+    global $db;
+
+    $email  = strtolower(trim((string) $object->email_from));
+    $domain = substr((string) strrchr($email, '@'), 1);
+    $labels = array_values(array_filter(explode('.', $domain), 'strlen'));
+    // Top level domain, then second level ones (co.uk, gouv.fr...)
+    array_pop($labels);
+    if (count($labels) > 1 && in_array(end($labels), ['co', 'com', 'gouv', 'asso', 'org', 'net', 'ac'], true)) {
+        array_pop($labels);
+    }
+    $label     = (string) end($labels);
+    $providers = ['gmail', 'googlemail', 'yahoo', 'ymail', 'hotmail', 'outlook', 'live', 'msn', 'icloud', 'me', 'mac', 'aol', 'gmx', 'proton', 'protonmail', 'orange', 'wanadoo', 'free', 'sfr', 'neuf', 'laposte', 'bbox', 'numericable', 'club-internet', 'aliceadsl', 'yandex', 'mail', 'zoho'];
+    if ($label !== '' && !in_array($label, $providers, true)) {
+        return dol_strtoupper(str_replace('-', ' ', $label));
+    }
+
+    // A mail provider: the name of the sender, kept by Inbox with the mail
+    if (!isModEnabled('inbox') || empty($object->message_id)) {
+        return '';
+    }
+    $row = $db->getRow('SELECT from_name FROM ' . $db->prefix() . "inbox_mail WHERE message_id = '" . $db->escape((string) $object->message_id) . "' ORDER BY rowid ASC");
+
+    return is_object($row) ? trim((string) $row->from_name) : '';
+}
+
+/**
  * Mailboxes of the module Inbox, to choose the one of the TMD requests
  *
  * @return array<int,string> Id of the mailbox => address (and name)

@@ -423,10 +423,30 @@ class ActionsDolitmd
             $this->results[$key] = '<span class="dolitmd-replies classfortooltip" title="' . dol_escape_htmltag($title) . '"><i class="fas fa-comment-dots"></i> ' . ((int) $object->nb_replies) . '</span> '
                 . dol_escape_htmltag((string) $object->label);
         } elseif ($key === 'fk_soc' && empty($object->fk_soc) && !empty($object->email_from)) {
-            // No thirdparty nor contact with the address of the sender: the address itself, so that the request is known
-            $this->results[$key] = '<span class="opacitymedium classfortooltip" title="' . dol_escape_htmltag($langs->transnoentities('TmdUnknownSender')) . '">'
-                . img_picto('', 'email', 'class="pictofixedwidth"') . dol_escape_htmltag($object->email_from) . '</span>';
+            // No thirdparty nor contact with the address of the sender: the address itself, so that the request is known,
+            // and the button that creates its thirdparty
+            $this->results[$key] = dolitmd_sender_html($object, dolitmd_can_create_thirdparty($user));
         }
+
+        return 0;
+    }
+
+    /**
+     * Modal creating the thirdparty of an unknown sender, under the list of the TMD requests (out of the form of the list)
+     *
+     * @param  array $parameters Hook metadata (context, etc...)
+     * @return int               0 < on error, 0 on success, 1 to replace standard code
+     */
+    public function printCommonFooter(array $parameters): int
+    {
+        global $conf, $db, $langs, $mysoc, $user;
+
+        if (strpos($parameters['context'] ?? '', 'tmdlist_saturne') === false || !dolitmd_can_create_thirdparty($user)) {
+            return 0;
+        }
+
+        $langs->load('dolitmd@dolitmd');
+        include __DIR__ . '/../core/tpl/dolitmd_thirdparty_create_modal.tpl.php';
 
         return 0;
     }
