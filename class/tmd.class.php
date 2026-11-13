@@ -616,6 +616,62 @@ class Tmd extends SaturneObject
     }
 
     /**
+     * The thirdparty of the sender, found or just created: on this request and on the other ones of the same address
+     * still without thirdparty, and on their tickets
+     *
+     * @param  User  $user      User linking
+     * @param  int   $socId     Thirdparty
+     * @param  int   $contactId Contact with the address, 0 when none
+     * @return int[]|false      Ids of the requests linked, false on error
+     */
+    public function linkSenderThirdparty(User $user, int $socId, int $contactId = 0)
+    {
+        $p     = $this->db->prefix();
+        $email = strtolower(trim((string) $this->email_from));
+        $sql   = 'SELECT rowid, fk_ticket FROM ' . $p . $this->table_element . ' WHERE entity IN (' . getEntity($this->element) . ')';
+        $sql  .= ' AND status <> ' . self::STATUS_DELETED . ' AND (fk_soc IS NULL OR fk_soc = 0)';
+        $sql  .= ' AND (rowid = ' . ((int) $this->id) . ($email !== '' ? " OR LOWER(email_from) = '" . $this->db->escape($email) . "'" : '') . ')';
+        $resql = $this->db->query($sql);
+        if (!$resql) {
+            $this->error = $this->db->lasterror();
+            return false;
+        }
+        $ids     = [];
+        $tickets = [];
+        while ($obj = $this->db->fetch_object($resql)) {
+            $ids[] = (int) $obj->rowid;
+            if ((int) $obj->fk_ticket > 0) {
+                $tickets[] = (int) $obj->fk_ticket;
+            }
+        }
+        if (empty($ids)) {
+            return [];
+        }
+
+        $this->db->begin();
+        $sql  = 'UPDATE ' . $p . $this->table_element . ' SET fk_soc = ' . $socId . ', fk_user_modif = ' . ((int) $user->id);
+        $sql .= $contactId > 0 ? ', fk_socpeople = CASE WHEN fk_socpeople IS NULL OR fk_socpeople = 0 THEN ' . $contactId . ' ELSE fk_socpeople END' : '';
+        $sql .= ' WHERE rowid IN (' . implode(',', $ids) . ')';
+        $ok   = (bool) $this->db->query($sql);
+        // A ticket already given a thirdparty by hand keeps it
+        if ($ok && !empty($tickets) && isModEnabled('ticket')) {
+            $ok = (bool) $this->db->query('UPDATE ' . $p . 'ticket SET fk_soc = ' . $socId . ' WHERE rowid IN (' . implode(',', $tickets) . ') AND (fk_soc IS NULL OR fk_soc = 0)');
+        }
+        if (!$ok) {
+            $this->error = $this->db->lasterror();
+            $this->db->rollback();
+            return false;
+        }
+        $this->db->commit();
+
+        if (in_array((int) $this->id, $ids, true)) {
+            $this->fk_soc = $socId;
+        }
+
+        return $ids;
+    }
+
+    /**
      * State from the ticks, and who ticked them and when (kept while ticked, cleared when unticked)
      *
      * @param  User        $user   User saving
@@ -668,6 +724,11 @@ class Tmd extends SaturneObject
         if ($key === 'date_due' && $this->id > 0) {
             require_once __DIR__ . '/../lib/dolitmd.lib.php';
             return dolitmd_due_html($this);
+        }
+        // Unknown sender: its address and the button that creates its thirdparty, as in the list
+        if ($key === 'fk_soc' && $this->id > 0 && empty($this->fk_soc) && !empty($this->email_from)) {
+            require_once __DIR__ . '/../lib/dolitmd.lib.php';
+            return dolitmd_sender_html($this, dolitmd_can_create_thirdparty($user));
         }
 
         return parent::showOutputField($val, $key, $value, $moreparam, $keysuffix, $keyprefix, $morecss);
