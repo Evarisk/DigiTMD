@@ -555,7 +555,22 @@ class TmdMailHandler
             $ticket->context['contact_id'] = $contactId;
         }
 
-        if ($ticket->create($author) <= 0) {
+        // The mail « New ticket » of the module Ticket goes to the address of DoliTMD when one is set: the module Ticket
+        // has a single address for every ticket of Dolibarr, whatever module creates it. Its own way for the automatic
+        // copy (MAIN_MAIL_AUTOCOPY_TO): the setting changed for the time of the creation only
+        $notifyTo = getDolGlobalString('DOLITMD_TICKET_NOTIFICATION_EMAIL_TO');
+        $globalTo = getDolGlobalString('TICKET_NOTIFICATION_EMAIL_TO');
+        if ($notifyTo !== '') {
+            $conf->global->TICKET_NOTIFICATION_EMAIL_TO = $notifyTo;
+        }
+        try {
+            $created = $ticket->create($author);
+        } finally {
+            if ($notifyTo !== '') {
+                $conf->global->TICKET_NOTIFICATION_EMAIL_TO = $globalTo;
+            }
+        }
+        if ($created <= 0) {
             $this->error  = $ticket->error;
             $this->errors = array_merge($this->errors, (array) $ticket->errors);
             dol_syslog(__METHOD__ . ' ticket of mail ' . ((int) $row->rowid) . ' not created: ' . $ticket->error . ' ' . implode(', ', (array) $ticket->errors), LOG_ERR);
