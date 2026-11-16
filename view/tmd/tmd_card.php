@@ -104,7 +104,7 @@ if (empty($resHook)) {
         $mailer = new TmdMailer($db);
         if ($action == 'presenddone') {
             $draft    = $mailer->doneDraft($object);
-            $doneForm = ['to' => $draft['to'], 'cc' => TmdMailer::addressesText($draft['cc']), 'subject' => $draft['subject'], 'html' => $draft['html'], 'files' => array_column($draft['files'], 'name')];
+            $doneForm = ['to' => $draft['to'], 'cc' => implode(', ', array_column($draft['cc'], 'email')), 'subject' => $draft['subject'], 'html' => $draft['html'], 'files' => array_column($draft['files'], 'name')];
         } else {
             // Addresses with their names (« Name <a@b.c> »): read as typed, each one checked by parseAddresses()
             $doneForm = ['to' => GETPOST('sendto', 'none'), 'cc' => GETPOST('sendtocc', 'none'), 'subject' => GETPOST('subject', 'alphanohtml'), 'html' => GETPOST('message', 'restricthtml'), 'files' => GETPOST('files', 'array')];
