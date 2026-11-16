@@ -182,6 +182,20 @@ class TmdMailer
             return false;
         }
 
+        // Addresses typed alone: the names given in the mail of the request, as in a normal answer
+        require_once __DIR__ . '/tmdmailhandler.class.php';
+        $names = array_column((new TmdMailHandler($this->db))->requestPeople($tmd), 'name', 'email');
+        $named = static function (array $list) use ($names): array {
+            foreach ($list as $i => $person) {
+                if ($person['name'] === '' && !empty($names[$person['email']])) {
+                    $list[$i]['name'] = $names[$person['email']];
+                }
+            }
+            return $list;
+        };
+        $to = $named($to);
+        $cc = $named($cc);
+
         $ticket = $this->ticketOf($tmd);
         if (!$this->sendFull($to, $cc, $subject, $html, (string) $tmd->message_id, $attachments, $ticket, $auto)) {
             return false;

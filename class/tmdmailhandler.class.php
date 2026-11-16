@@ -407,17 +407,45 @@ class TmdMailHandler
      */
     public function mailPeople(object $row, $message, object $mailbox, string $exclude, string $sender = ''): array
     {
-        $people = [];
-        if (is_object($message) && (!empty($message->to) || !empty($message->cc))) {
-            $people = array_merge((array) $message->to, (array) $message->cc);
-        } elseif (dol_include_once('/inbox/class/inboxmimeparser.class.php') && class_exists('InboxMimeParser')) {
-            $people = InboxMimeParser::parseAddressList(trim((string) ($row->to_text ?? '') . ', ' . (string) ($row->cc_text ?? ''), ' ,'));
-        }
+        $people = $this->recipients($row, $message);
         if ($sender !== '') {
             array_unshift($people, ['email' => $sender, 'name' => (string) ($row->from_name ?? '')]);
         }
 
-        $skip   = $this->ownAddresses($mailbox);
+        return $this->filterPeople($people, $mailbox, $exclude);
+    }
+
+    /**
+     * Recipients and copies of a mail
+     *
+     * @param  object            $row     Row of llx_inbox_mail (to_text, cc_text)
+     * @param  InboxMessage|null $message Mail parsed, null for the recipients kept by Inbox in its index
+     * @return array<int,array{email:string,name:string}>
+     */
+    protected function recipients(object $row, $message): array
+    {
+        if (is_object($message) && (!empty($message->to) || !empty($message->cc))) {
+            return array_merge((array) $message->to, (array) $message->cc);
+        }
+        if (dol_include_once('/inbox/class/inboxmimeparser.class.php') && class_exists('InboxMimeParser')) {
+            return InboxMimeParser::parseAddressList(trim((string) ($row->to_text ?? '') . ', ' . (string) ($row->cc_text ?? ''), ' ,'));
+        }
+
+        return [];
+    }
+
+    /**
+     * People kept, once each: never the TMD mailbox, the address the tickets write from, the address left out (the
+     * sender of the request) nor a robot; MAX_COPIED_CONTACTS at most
+     *
+     * @param  array<int,array{email:string,name:string}> $people  People
+     * @param  object|null                                $mailbox Mailbox (InboxAccount or its row: id or rowid, email)
+     * @param  string                                     $exclude Address left out: the sender of the request
+     * @return array<int,array{email:string,name:string}> Addresses in lower case
+     */
+    protected function filterPeople(array $people, ?object $mailbox, string $exclude): array
+    {
+        $skip   = $this->ownAddresses($mailbox ?? (object) []);
         $skip[] = strtolower(trim($exclude));
         $out    = [];
         foreach ($people as $person) {
@@ -426,7 +454,7 @@ class TmdMailHandler
                 continue;
             }
             if (count($out) >= self::MAX_COPIED_CONTACTS) {
-                dol_syslog(__METHOD__ . ' more than ' . self::MAX_COPIED_CONTACTS . ' people in mail ' . ($row->message_id ?? '') . ', the others are left out', LOG_WARNING);
+                dol_syslog(__METHOD__ . ' more than ' . self::MAX_COPIED_CONTACTS . ' people, the others are left out', LOG_WARNING);
                 break;
             }
             $out[$email] = ['email' => $email, 'name' => trim((string) ($person['name'] ?? ''))];
@@ -436,21 +464,65 @@ class TmdMailHandler
     }
 
     /**
-     * People in copy of the mail of a request (its recipients and copies, but the TMD mailbox and the sender): the mail
-     * « request done » goes to them too
+     * People the mail « request done » goes to in copy: the recipients and copies of the mail of the request, then the
+     * external contacts of its ticket (come with an answer or added by hand), but the TMD mailbox and the sender
      *
      * @param  Tmd $tmd TMD request
      * @return array<int,array{email:string,name:string}>
      */
     public function requestCopies(Tmd $tmd): array
     {
+        $people = [];
+        $row    = $this->requestMail($tmd);
+        if ($row !== null) {
+            $people = $this->recipients($row, null);
+        }
+        if (!empty($tmd->fk_ticket) && isModEnabled('ticket')) {
+            $ticket = new Ticket($this->db);
+            if ($ticket->fetch((int) $tmd->fk_ticket) > 0) {
+                // The ones a message written from the ticket goes to: its active external contacts (the core 24 prints
+                // warnings there, Ticket::listeContact(): never before a redirect)
+                ob_start();
+                $contacts = $ticket->getInfosTicketExternalContact(1);
+                ob_end_clean();
+                foreach (is_array($contacts) ? $contacts : [] as $contact) {
+                    $people[] = ['email' => (string) $contact['email'], 'name' => dolGetFirstLastname((string) $contact['firstname'], (string) $contact['lastname'])];
+                }
+            }
+        }
+
+        return $this->filterPeople($people, self::configuredMailbox($this->db), (string) $tmd->email_from);
+    }
+
+    /**
+     * People of a request with their names: its sender, then the people in copy (requestCopies())
+     *
+     * @param  Tmd $tmd TMD request
+     * @return array<int,array{email:string,name:string}>
+     */
+    public function requestPeople(Tmd $tmd): array
+    {
+        $row    = $this->requestMail($tmd);
+        $sender = ['email' => strtolower(trim((string) $tmd->email_from)), 'name' => $row !== null ? trim((string) $row->from_name) : ''];
+
+        return array_merge([$sender], $this->requestCopies($tmd));
+    }
+
+    /**
+     * Mail of a request in the index of Inbox (TMD mailbox)
+     *
+     * @param  Tmd         $tmd TMD request
+     * @return object|null      Row of llx_inbox_mail (message_id, from_name, to_text, cc_text)
+     */
+    protected function requestMail(Tmd $tmd): ?object
+    {
         $mailbox = self::configuredMailbox($this->db);
         if ($mailbox === null || empty($tmd->message_id)) {
-            return [];
+            return null;
         }
         $row = $this->db->getRow('SELECT message_id, from_name, to_text, cc_text FROM ' . $this->db->prefix() . 'inbox_mail WHERE fk_account = ' . ((int) $mailbox->rowid) . " AND message_id = '" . $this->db->escape((string) $tmd->message_id) . "' ORDER BY rowid ASC");
 
-        return is_object($row) ? $this->mailPeople($row, null, $mailbox, (string) $tmd->email_from) : [];
+        return is_object($row) ? $row : null;
     }
 
     /**
