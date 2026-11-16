@@ -81,7 +81,9 @@ $trackId = trim(GETPOST('track_id', 'alphanohtml'));
 // Initialize technical objects
 $object = new Tmd($db);
 
-$hookmanager->initHooks(['tmdpublictracking', 'saturnepublicinterface']);
+// Not the context saturnepublicinterface: Saturne prints the logo of the company there (SATURNE_SHOW_COMPANY_LOGO), and
+// the page has its own already
+$hookmanager->initHooks(['tmdpublictracking']);
 
 // One answer for a number unknown, mistyped or of a deleted request: nothing tells them apart
 $found = $trackId !== '' && $object->fetchByTrackId($trackId) > 0;
