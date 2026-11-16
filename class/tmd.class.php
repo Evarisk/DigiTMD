@@ -593,6 +593,39 @@ class Tmd extends SaturneObject
     }
 
     /**
+     * nomeref ID in the name of a document: the number starting with X (« PB ADR FRANCE X1640869.pdf » → X1640869)
+     *
+     * @param  string $fileName Name of the file
+     * @return string           ID in upper case, empty when the name has none
+     */
+    public static function softwareRefFromFileName(string $fileName): string
+    {
+        return preg_match('/(?<![A-Za-z0-9])X\d{5,}(?![0-9])/i', pathinfo($fileName, PATHINFO_FILENAME), $matches) ? strtoupper($matches[0]) : '';
+    }
+
+    /**
+     * A document added to the request (tab Documents): the nomeref ID in its name fills the request when it has none.
+     * An ID already given is never changed
+     *
+     * @param  User   $user     User adding the document
+     * @param  string $fileName Name of the file
+     * @return bool             ID filled
+     */
+    public function fillSoftwareRefFromFile(User $user, string $fileName): bool
+    {
+        if ($this->id <= 0 || trim((string) $this->software_ref) !== '' || (int) $this->status === self::STATUS_DELETED) {
+            return false;
+        }
+        $softwareRef = self::softwareRefFromFileName($fileName);
+        if ($softwareRef === '') {
+            return false;
+        }
+        $this->software_ref = $softwareRef;
+
+        return $this->update($user) > 0;
+    }
+
+    /**
      * Choose the state, then save: the ticks follow (pending = none, done = done, invoiced = done and invoiced)
      *
      * @param  User $user  User choosing

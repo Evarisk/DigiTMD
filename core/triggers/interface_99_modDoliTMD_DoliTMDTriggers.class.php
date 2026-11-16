@@ -69,6 +69,27 @@ class InterfaceDoliTMDTriggers extends DolibarrTriggers
             return 0;
         }
 
+        // A document added to a request (tab Documents): the number in X of its name (« PB ADR FRANCE X1640869.pdf ») is
+        // the nomeref ID of the request when it has none. Found by the source of the file, else by its folder
+        if ($action === 'ECMFILES_CREATE' && !empty($object->filename)) {
+            try {
+                require_once __DIR__ . '/../../class/tmd.class.php';
+                $tmd   = new Tmd($this->db);
+                $found = 0;
+                if (($object->src_object_type ?? '') === $tmd->table_element && (int) ($object->src_object_id ?? 0) > 0) {
+                    $found = $tmd->fetch((int) $object->src_object_id);
+                } elseif (preg_match('#(?:^|/)dolitmd/tmd/([^/]+)$#', (string) ($object->filepath ?? ''), $matches)) {
+                    $found = $tmd->fetch(0, $matches[1]);
+                }
+                if ($found > 0 && $tmd->fillSoftwareRefFromFile($user, (string) $object->filename)) {
+                    dol_syslog('DoliTMD: nomeref ID ' . $tmd->software_ref . ' of ' . $tmd->ref . ' taken from the document ' . $object->filename);
+                }
+            } catch (Throwable $e) {
+                dol_syslog('DoliTMD: nomeref ID not taken from the document ' . $object->filename . ': ' . $e->getMessage(), LOG_WARNING);
+            }
+            return 0;
+        }
+
         // Mail received on the TMD mailbox: switched off for now. The trigger INBOX_MAIL_RECEIVED is not in the module
         // Inbox yet (local patch only): the scheduled job « DoliTMD: TMD mails without a request »
         // (TmdMailHandler::cronCatchUp) fetches the mailbox itself and makes the tickets and the requests. To switch
