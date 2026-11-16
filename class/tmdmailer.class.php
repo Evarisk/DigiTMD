@@ -222,20 +222,18 @@ class TmdMailer
      */
     public static function parseAddresses(string $value, array &$bad = []): array
     {
-        if (dol_include_once('/inbox/class/inboxmailbuilder.class.php') && class_exists('InboxMailBuilder')) {
-            return InboxMailBuilder::parseAddresses($value, $bad);
-        }
+        // Read here, never with a function of Inbox: its classes change from a version to another
         $out = [];
-        foreach (preg_split('/[,;\n]+/', $value) as $part) {
+        foreach (preg_split('/[,;\n]+(?=(?:[^"]*"[^"]*")*[^"]*$)/', $value) as $part) {
             $email = strtolower(trim(preg_match('/<([^<>]+)>/', $part, $m) ? $m[1] : $part));
             if ($email === '') {
                 continue;
             }
-            if (!isValidEmail($email)) {
+            if (!isValidEmail($email) || preg_match('/[\r\n]/', $email)) {
                 $bad[] = $email;
                 continue;
             }
-            $out[$email] = ['email' => $email, 'name' => trim(preg_replace('/<[^<>]*>|["\x00-\x1F]/', '', $part))];
+            $out[$email] = ['email' => $email, 'name' => strpos($part, '<') !== false ? trim(preg_replace('/<[^<>]*>|["\x00-\x1F]/', '', $part)) : ''];
         }
 
         return array_values($out);
@@ -598,6 +596,34 @@ class TmdMailer
     }
 
     /**
+     * The classes of Inbox that send a mail written here are there, in the version installed (they change from a version
+     * to another): else the mail setup of Dolibarr sends
+     *
+     * @return bool
+     */
+    protected function inboxCanSend(): bool
+    {
+        foreach (['/inbox/class/inboxaccount.class.php', '/inbox/class/inboxmailbuilder.class.php', '/inbox/class/connector/inboxconnectorfactory.class.php'] as $file) {
+            if (!dol_include_once($file)) {
+                return false;
+            }
+        }
+        dol_include_once('/inbox/class/inboxcomposer.class.php');
+        if (!class_exists('InboxAccount') || !class_exists('InboxMailBuilder') || !method_exists('InboxMailBuilder', 'build') || !class_exists('InboxConnectorFactory') || !method_exists('InboxConnectorFactory', 'forAccount')) {
+            dol_syslog(__METHOD__ . ' classes of Inbox to send missing in its installed version: the mail setup of Dolibarr sends', LOG_WARNING);
+            return false;
+        }
+        foreach (['from', 'to', 'cc', 'subject', 'html', 'inReplyTo', 'references', 'attachments'] as $property) {
+            if (!property_exists('InboxMailBuilder', $property)) {
+                dol_syslog(__METHOD__ . ' InboxMailBuilder::$' . $property . ' missing in the installed version of Inbox: the mail setup of Dolibarr sends', LOG_WARNING);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Send to several people with attachments: by the TMD mailbox as a mail written in Inbox (a copy in its Sent
      * folder, the conversation of the request), else by the mail setup of Dolibarr
      *
@@ -624,8 +650,7 @@ class TmdMailer
 
         require_once __DIR__ . '/tmdmailhandler.class.php';
         $mailbox = TmdMailHandler::configuredMailbox($this->db);
-        if ($mailbox !== null && (int) $mailbox->status === 1 && dol_include_once('/inbox/class/inboxaccount.class.php') && dol_include_once('/inbox/class/inboxmailbuilder.class.php')
-            && dol_include_once('/inbox/class/inboxcomposer.class.php') && dol_include_once('/inbox/class/connector/inboxconnectorfactory.class.php') && class_exists('InboxMailBuilder')) {
+        if ($mailbox !== null && (int) $mailbox->status === 1 && $this->inboxCanSend()) {
             $account = new InboxAccount($this->db);
             if ($account->fetch((int) $mailbox->rowid) > 0) {
                 $builder          = new InboxMailBuilder();
@@ -642,33 +667,34 @@ class TmdMailer
                     $builder->attachments[] = ['path' => $file['fullname'], 'name' => $file['name'], 'mime' => dol_mimetype($file['name'])];
                 }
                 $built = $builder->build();
-                if ($built === null) {
-                    $this->error = $builder->error;
+                if (!is_array($built) || !isset($built['wire'], $built['raw']) || empty($built['recipients'])) {
+                    $this->error = (string) $builder->error;
                     return false;
                 }
 
                 $error     = '';
                 $connector = InboxConnectorFactory::forAccount($this->db, $account, $error);
-                if (!$connector) {
-                    $this->error = $error;
+                if (!is_object($connector) || !method_exists($connector, 'send')) {
+                    $this->error = $error !== '' ? $error : 'No connection to the TMD mailbox';
                     return false;
                 }
-                if (!$connector->can(InboxConnectorInterface::CAP_SEND)) {
+                if (method_exists($connector, 'can') && defined('InboxConnectorInterface::CAP_SEND') && !$connector->can(InboxConnectorInterface::CAP_SEND)) {
                     $connector->disconnect();
                     $this->error = 'No sending server for the TMD mailbox';
                     return false;
                 }
                 if (!$connector->send($auto . $built['wire'], ['from' => $builder->from['email'], 'recipients' => $built['recipients']])) {
-                    $this->error = (string) $connector->getError();
+                    $this->error = method_exists($connector, 'getError') ? (string) $connector->getError() : 'Mail refused by the server of the TMD mailbox';
                     $connector->disconnect();
                     dol_syslog(__METHOD__ . ' mail not sent by the TMD mailbox: ' . $this->error, LOG_WARNING);
                     return false;
                 }
                 // The copy in Sent, as for a mail written in Inbox (unless the sending server files it itself)
-                if (!$account->sentCopyByServer()) {
-                    $sent = (new InboxComposer($this->db))->roleFolder($account, 'sent');
+                $sentByServer = method_exists($account, 'sentCopyByServer') && $account->sentCopyByServer();
+                if (!$sentByServer && class_exists('InboxComposer') && method_exists('InboxComposer', 'roleFolder') && method_exists($connector, 'importRaw')) {
+                    $sent = (string) (new InboxComposer($this->db))->roleFolder($account, 'sent');
                     if ($sent !== '' && $connector->importRaw($sent, $auto . $built['raw'], ['\\Seen']) === null) {
-                        dol_syslog(__METHOD__ . ' copy in Sent failed: ' . $connector->getError(), LOG_WARNING);
+                        dol_syslog(__METHOD__ . ' copy in Sent failed', LOG_WARNING);
                     }
                 }
                 $connector->disconnect();
