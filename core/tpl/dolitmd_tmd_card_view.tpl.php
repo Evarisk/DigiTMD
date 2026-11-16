@@ -90,10 +90,16 @@ if (empty($resHook)) {
     if ($publicUrl !== '') {
         print dolGetButtonAction('<i class="fas fa-globe pictofixedwidth"></i>' . $langs->trans('TmdPublicPage'), '', 'default', $publicUrl, '', 1, ['attr' => ['target' => '_blank', 'rel' => 'noopener']]);
     }
+    print dolGetButtonAction('<i class="fas fa-paper-plane pictofixedwidth"></i>' . $langs->trans('TmdSendDone'), '', 'default', $_SERVER['PHP_SELF'] . '?id=' . $object->id . '&action=presenddone&token=' . newToken() . '#dolitmd-senddone', '', $permissiontoadd);
     print dolGetButtonAction('<i class="fas fa-edit pictofixedwidth"></i>' . $langs->trans('Modify'), '', 'default', $_SERVER['PHP_SELF'] . '?id=' . $object->id . '&action=edit&token=' . newToken(), '', $permissiontoadd);
     print dolGetButtonAction('<i class="fas fa-trash pictofixedwidth"></i>' . $langs->trans('Delete'), '', 'delete', $_SERVER['PHP_SELF'] . '?id=' . $object->id . '&action=delete&token=' . newToken(), '', $permissiontodelete);
 }
 print '</div>';
+
+// Mail « request done », read again before sending it
+if ($action == 'presenddone' && !empty($doneForm) && $permissiontoadd) {
+    include __DIR__ . '/dolitmd_tmd_card_senddone.tpl.php';
+}
 
 // Unknown sender: the modal of the button « + » of its address
 if (empty($object->fk_soc) && !empty($object->email_from) && dolitmd_can_create_thirdparty($user)) {

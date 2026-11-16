@@ -271,17 +271,8 @@ function dolitmd_sender_company_name(Tmd $object): string
 {
     global $db;
 
-    $email  = strtolower(trim((string) $object->email_from));
-    $domain = substr((string) strrchr($email, '@'), 1);
-    $labels = array_values(array_filter(explode('.', $domain), 'strlen'));
-    // Top level domain, then second level ones (co.uk, gouv.fr...)
-    array_pop($labels);
-    if (count($labels) > 1 && in_array(end($labels), ['co', 'com', 'gouv', 'asso', 'org', 'net', 'ac'], true)) {
-        array_pop($labels);
-    }
-    $label     = (string) end($labels);
-    $providers = ['gmail', 'googlemail', 'yahoo', 'ymail', 'hotmail', 'outlook', 'live', 'msn', 'icloud', 'me', 'mac', 'aol', 'gmx', 'proton', 'protonmail', 'orange', 'wanadoo', 'free', 'sfr', 'neuf', 'laposte', 'bbox', 'numericable', 'club-internet', 'aliceadsl', 'yandex', 'mail', 'zoho'];
-    if ($label !== '' && !in_array($label, $providers, true)) {
+    $label = dolitmd_company_domain_label((string) $object->email_from);
+    if ($label !== '') {
         return dol_strtoupper(str_replace('-', ' ', $label));
     }
 
@@ -292,6 +283,28 @@ function dolitmd_sender_company_name(Tmd $object): string
     $row = $db->getRow('SELECT from_name FROM ' . $db->prefix() . "inbox_mail WHERE message_id = '" . $db->escape((string) $object->message_id) . "' ORDER BY rowid ASC");
 
     return is_object($row) ? trim((string) $row->from_name) : '';
+}
+
+/**
+ * Name of the company in the domain of an address, without its top level domains (staci.com → staci), empty for the
+ * address of a mail provider (gmail, orange...), which never tells the company of a person
+ *
+ * @param  string $email Address
+ * @return string        Lower case, empty when none
+ */
+function dolitmd_company_domain_label(string $email): string
+{
+    $domain = substr((string) strrchr(strtolower(trim($email)), '@'), 1);
+    $labels = array_values(array_filter(explode('.', $domain), 'strlen'));
+    // Top level domain, then second level ones (co.uk, gouv.fr...)
+    array_pop($labels);
+    if (count($labels) > 1 && in_array(end($labels), ['co', 'com', 'gouv', 'asso', 'org', 'net', 'ac'], true)) {
+        array_pop($labels);
+    }
+    $label     = (string) end($labels);
+    $providers = ['gmail', 'googlemail', 'yahoo', 'ymail', 'hotmail', 'outlook', 'live', 'msn', 'icloud', 'me', 'mac', 'aol', 'gmx', 'proton', 'protonmail', 'orange', 'wanadoo', 'free', 'sfr', 'neuf', 'laposte', 'bbox', 'numericable', 'club-internet', 'aliceadsl', 'yandex', 'mail', 'zoho'];
+
+    return in_array($label, $providers, true) ? '' : $label;
 }
 
 /**

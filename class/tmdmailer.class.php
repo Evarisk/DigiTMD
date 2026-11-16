@@ -91,7 +91,8 @@ class TmdMailer
     }
 
     /**
-     * Mail to the sender of a request now done
+     * Mail « request done » when the request is ticked done, if the setup asks for it: as the one sent from the card,
+     * to the sender and the people in copy of his mail, the documents of the request attached
      *
      * @param  Tmd  $tmd  TMD request
      * @param  User $user User ticking done
@@ -99,7 +100,173 @@ class TmdMailer
      */
     public function sendDone(Tmd $tmd, User $user): bool
     {
-        return $this->sendToSender('done', $tmd, $user, 'auto-generated');
+        if (!getDolGlobalInt(self::MAILS['done']['const']) || !isValidEmail((string) $tmd->email_from)) {
+            return false;
+        }
+        if ($this->template('done') === null) {
+            $this->error = 'Template ' . self::MAILS['done']['template'] . ' not found';
+            dol_syslog(__METHOD__ . ' ' . $this->error, LOG_WARNING);
+            return false;
+        }
+        $draft = $this->doneDraft($tmd);
+
+        return $this->sendDoneMail($tmd, $user, self::parseAddresses($draft['to']), $draft['cc'], $draft['subject'], $draft['html'], array_column($draft['files'], 'name'), true);
+    }
+
+    /**
+     * Mail « request done » to read again before sending it: to the sender, in copy the people in copy of his mail, the
+     * template filled, the documents of the request
+     *
+     * @param  Tmd $tmd TMD request
+     * @return array{to:string,cc:array<int,array{email:string,name:string}>,subject:string,html:string,files:array<int,array{name:string,size:int,date:int,fullname:string}>}
+     */
+    public function doneDraft(Tmd $tmd): array
+    {
+        global $langs;
+
+        $langs->load('dolitmd@dolitmd');
+        $template = $this->template('done');
+        if ($template !== null) {
+            [$subject, $html] = $this->compose($template, $this->substitutions($tmd, $this->ticketOf($tmd)));
+        } else {
+            [$subject, $html] = ['Re: ' . $tmd->label, ''];
+        }
+        require_once __DIR__ . '/tmdmailhandler.class.php';
+
+        return [
+            'to'      => (string) $tmd->email_from,
+            'cc'      => (new TmdMailHandler($this->db))->requestCopies($tmd),
+            'subject' => $subject,
+            'html'    => $html,
+            'files'   => $tmd->getPublicFiles(),
+        ];
+    }
+
+    /**
+     * Send the mail « request done » in the conversation of the mail of the request, the documents chosen attached,
+     * and write it in the messages of the ticket
+     *
+     * @param  Tmd                                       $tmd     TMD request
+     * @param  User                                      $user    User sending
+     * @param  array<int,array{email:string,name:string}> $to      Recipients
+     * @param  array<int,array{email:string,name:string}> $cc      Copies
+     * @param  string                                    $subject Subject
+     * @param  string                                    $html    HTML
+     * @param  string[]                                  $files   Names of documents of the request (tab Documents)
+     * @param  bool                                      $auto    Sent by ticking done, not by a person (Auto-Submitted)
+     * @return bool                                               Sent
+     */
+    public function sendDoneMail(Tmd $tmd, User $user, array $to, array $cc, string $subject, string $html, array $files, bool $auto = false): bool
+    {
+        global $langs;
+
+        $langs->load('dolitmd@dolitmd');
+        $this->error = '';
+        if (empty($to)) {
+            $this->error = $langs->transnoentities('ErrorFieldRequired', $langs->transnoentities('MailTo'));
+            return false;
+        }
+
+        // Only documents of the request, found by their name in its folder: never a path given by the page
+        $attachments = [];
+        $size        = 0;
+        foreach ($tmd->getPublicFiles() as $file) {
+            if (in_array($file['name'], $files, true)) {
+                $attachments[] = $file;
+                $size += $file['size'];
+            }
+        }
+        $max = getDolGlobalInt('INBOX_SEND_MAX_MB', 20) * 1048576;
+        if ($size > $max) {
+            $this->error = $langs->transnoentities('TmdMailTooBig', dol_print_size($size), dol_print_size($max));
+            return false;
+        }
+
+        $ticket = $this->ticketOf($tmd);
+        if (!$this->sendFull($to, $cc, $subject, $html, (string) $tmd->message_id, $attachments, $ticket, $auto)) {
+            return false;
+        }
+
+        // In the messages of the ticket: what was sent, to whom, with which documents
+        if ($ticket) {
+            $names           = array_column($attachments, 'name');
+            $ticket->message = $this->text($html) . ($names ? "\n\n" . $langs->transnoentities('TmdMailAttachments', implode(', ', $names)) : '');
+            $ticket->private = 0;
+            $recipients      = dol_trunc(implode(', ', array_column(array_merge($to, $cc), 'email')), 180, 'right', 'UTF-8', 1);
+            $ticket->createTicketMessage($user, 1, [], [], [], true, 0, $langs->transnoentities('TmdMailDoneSent', $recipients));
+        }
+
+        return true;
+    }
+
+    /**
+     * Addresses typed (« Name <a@b.c>, d@e.f; ... »), each one checked
+     *
+     * @param  string   $value Text
+     * @param  string[] $bad   Addresses refused
+     * @return array<int,array{email:string,name:string}>
+     */
+    public static function parseAddresses(string $value, array &$bad = []): array
+    {
+        if (dol_include_once('/inbox/class/inboxmailbuilder.class.php') && class_exists('InboxMailBuilder')) {
+            return InboxMailBuilder::parseAddresses($value, $bad);
+        }
+        $out = [];
+        foreach (preg_split('/[,;\n]+/', $value) as $part) {
+            $email = strtolower(trim(preg_match('/<([^<>]+)>/', $part, $m) ? $m[1] : $part));
+            if ($email === '') {
+                continue;
+            }
+            if (!isValidEmail($email)) {
+                $bad[] = $email;
+                continue;
+            }
+            $out[$email] = ['email' => $email, 'name' => trim(preg_replace('/<[^<>]*>|["\x00-\x1F]/', '', $part))];
+        }
+
+        return array_values($out);
+    }
+
+    /**
+     * Addresses for a field of the page (« Name <a@b.c>, d@e.f »)
+     *
+     * @param  array<int,array{email:string,name:string}> $list Addresses
+     * @return string
+     */
+    public static function addressesText(array $list): string
+    {
+        return implode(', ', array_map(static function ($a) {
+            return $a['name'] !== '' ? $a['name'] . ' <' . $a['email'] . '>' : $a['email'];
+        }, $list));
+    }
+
+    /**
+     * Address the mails of the requests come from: the TMD mailbox, else the mail setup of Dolibarr
+     *
+     * @return string
+     */
+    public function senderAddress(): string
+    {
+        require_once __DIR__ . '/tmdmailhandler.class.php';
+        $mailbox = TmdMailHandler::configuredMailbox($this->db);
+
+        return $mailbox !== null && (int) $mailbox->status === 1 ? (string) $mailbox->email : getDolGlobalString('MAIN_MAIL_EMAIL_FROM');
+    }
+
+    /**
+     * Ticket of a request
+     *
+     * @param  Tmd         $tmd TMD request
+     * @return Ticket|null
+     */
+    protected function ticketOf(Tmd $tmd): ?Ticket
+    {
+        if (empty($tmd->fk_ticket)) {
+            return null;
+        }
+        $ticket = new Ticket($this->db);
+
+        return $ticket->fetch((int) $tmd->fk_ticket) > 0 ? $ticket : null;
     }
 
     /**
@@ -412,6 +579,100 @@ class TmdMailer
         }
         $this->error = (string) $mail->error;
         dol_syslog(__METHOD__ . ' mail to ' . $to . ' not sent: ' . $this->error, LOG_WARNING);
+
+        return false;
+    }
+
+    /**
+     * Send to several people with attachments: by the TMD mailbox as a mail written in Inbox (a copy in its Sent
+     * folder, the conversation of the request), else by the mail setup of Dolibarr
+     *
+     * @param  array<int,array{email:string,name:string}>                     $to          Recipients
+     * @param  array<int,array{email:string,name:string}>                     $cc          Copies
+     * @param  string                                                         $subject     Subject
+     * @param  string                                                         $html        HTML
+     * @param  string                                                         $inReplyTo   Message-ID of the mail of the request, without the angle brackets
+     * @param  array<int,array{name:string,size:int,date:int,fullname:string}> $attachments Files
+     * @param  Ticket|null                                                    $ticket      Ticket (track id of Dolibarr)
+     * @param  bool                                                           $auto        Header Auto-Submitted (RFC 3834)
+     * @return bool
+     */
+    protected function sendFull(array $to, array $cc, string $subject, string $html, string $inReplyTo, array $attachments, ?Ticket $ticket, bool $auto): bool
+    {
+        global $langs;
+
+        $this->error = '';
+        if (getDolGlobalString('MAIN_DISABLE_ALL_MAILS')) {
+            $this->error = $langs->transnoentities('TmdMailsDisabled');
+            return false;
+        }
+        $auto = $auto ? "Auto-Submitted: auto-generated\r\nX-Auto-Response-Suppress: All\r\n" : '';
+
+        require_once __DIR__ . '/tmdmailhandler.class.php';
+        $mailbox = TmdMailHandler::configuredMailbox($this->db);
+        if ($mailbox !== null && (int) $mailbox->status === 1 && dol_include_once('/inbox/class/inboxaccount.class.php') && dol_include_once('/inbox/class/inboxmailbuilder.class.php')
+            && dol_include_once('/inbox/class/inboxcomposer.class.php') && dol_include_once('/inbox/class/connector/inboxconnectorfactory.class.php') && class_exists('InboxMailBuilder')) {
+            $account = new InboxAccount($this->db);
+            if ($account->fetch((int) $mailbox->rowid) > 0) {
+                $builder          = new InboxMailBuilder();
+                $builder->from    = ['email' => (string) $account->email, 'name' => (string) ($account->label && $account->label !== $account->email ? $account->label : getDolGlobalString('MAIN_INFO_SOCIETE_NOM'))];
+                $builder->to      = $to;
+                $builder->cc      = $cc;
+                $builder->subject = $subject;
+                $builder->html    = $html;
+                if ($inReplyTo !== '') {
+                    $builder->inReplyTo  = $inReplyTo;
+                    $builder->references = [$inReplyTo];
+                }
+                foreach ($attachments as $file) {
+                    $builder->attachments[] = ['path' => $file['fullname'], 'name' => $file['name'], 'mime' => dol_mimetype($file['name'])];
+                }
+                $built = $builder->build();
+                if ($built === null) {
+                    $this->error = $builder->error;
+                    return false;
+                }
+
+                $error     = '';
+                $connector = InboxConnectorFactory::forAccount($this->db, $account, $error);
+                if (!$connector) {
+                    $this->error = $error;
+                    return false;
+                }
+                if (!$connector->can(InboxConnectorInterface::CAP_SEND)) {
+                    $connector->disconnect();
+                    $this->error = 'No sending server for the TMD mailbox';
+                    return false;
+                }
+                if (!$connector->send($auto . $built['wire'], ['from' => $builder->from['email'], 'recipients' => $built['recipients']])) {
+                    $this->error = (string) $connector->getError();
+                    $connector->disconnect();
+                    dol_syslog(__METHOD__ . ' mail not sent by the TMD mailbox: ' . $this->error, LOG_WARNING);
+                    return false;
+                }
+                // The copy in Sent, as for a mail written in Inbox (unless the sending server files it itself)
+                if (!$account->sentCopyByServer()) {
+                    $sent = (new InboxComposer($this->db))->roleFolder($account, 'sent');
+                    if ($sent !== '' && $connector->importRaw($sent, $auto . $built['raw'], ['\\Seen']) === null) {
+                        dol_syslog(__METHOD__ . ' copy in Sent failed: ' . $connector->getError(), LOG_WARNING);
+                    }
+                }
+                $connector->disconnect();
+
+                return true;
+            }
+        }
+
+        // No TMD mailbox: the mail setup of Dolibarr
+        require_once DOL_DOCUMENT_ROOT . '/core/class/CMailFile.class.php';
+        $page = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' . $html . '</body></html>';
+        $mail = new CMailFile($subject, self::addressesText($to), getDolGlobalString('MAIN_MAIL_EMAIL_FROM'), $page, array_column($attachments, 'fullname'), array_map('dol_mimetype', array_column($attachments, 'name')),
+            array_column($attachments, 'name'), self::addressesText($cc), '', 0, 1, '', '', $ticket ? 'tic' . $ticket->id : '', $auto, 'standard', '', '', $inReplyTo, $inReplyTo);
+        if ($mail->sendfile()) {
+            return true;
+        }
+        $this->error = (string) $mail->error;
+        dol_syslog(__METHOD__ . ' mail not sent: ' . $this->error, LOG_WARNING);
 
         return false;
     }
