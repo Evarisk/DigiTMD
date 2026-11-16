@@ -547,6 +547,57 @@ class TmdMailHandler
     }
 
     /**
+     * Contact of the sender of a request on the thirdparty chosen for him: the contact with his address on it, else a new
+     * one (his next mails find the thirdparty by it). Never a second contact when his address is a contact of another
+     * thirdparty already
+     *
+     * @param  Tmd  $tmd   Request
+     * @param  int  $socId Thirdparty chosen
+     * @param  User $user  User linking
+     * @return int         Id of the contact, 0 when none
+     */
+    public function senderContact(Tmd $tmd, int $socId, User $user): int
+    {
+        global $conf, $langs;
+
+        $email = strtolower(trim((string) $tmd->email_from));
+        if ($socId <= 0 || !isValidEmail($email)) {
+            return 0;
+        }
+        $known = $this->db->getRow('SELECT rowid, fk_soc FROM ' . $this->db->prefix() . 'socpeople WHERE entity IN (' . getEntity('contact') . ") AND LOWER(email) = '" . $this->db->escape($email) . "'"
+            . ' ORDER BY (fk_soc = ' . $socId . ') DESC, statut DESC, rowid ASC');
+        if (is_object($known)) {
+            return (int) $known->fk_soc === $socId ? (int) $known->rowid : 0;
+        }
+        if (!$user->hasRight('societe', 'contact', 'creer')) {
+            return 0;
+        }
+
+        // The name he gives in his mail (« Leterrier Karine »), else the start of his address
+        $people = $this->requestPeople($tmd);
+        $name   = trim((string) ($people[0]['name'] ?? ''), " \t\"'");
+        if ($name === '' || strpos($name, '@') !== false) {
+            $name = substr($email, 0, (int) strpos($email, '@'));
+        }
+
+        $contact               = new Contact($this->db);
+        $contact->lastname     = dol_trunc($name, 50, 'right', 'UTF-8', 1);
+        $contact->email        = $email;
+        $contact->socid        = $socId;
+        $contact->statut       = 1;
+        $contact->status       = 1;
+        $contact->priv         = 0;
+        $contact->entity       = $conf->entity;
+        $contact->note_private = $langs->transnoentities('TmdContactFromSender', $tmd->ref);
+        if ($contact->create($user) <= 0) {
+            dol_syslog(__METHOD__ . ' contact of ' . $email . ' not created: ' . $contact->error . ' ' . implode(', ', (array) $contact->errors), LOG_WARNING);
+            return 0;
+        }
+
+        return (int) $contact->id;
+    }
+
+    /**
      * Contact of a person in copy: the known one, else a new one, on the thirdparty with this address, or on the one of
      * the ticket when the address is of the company of the sender of the request, else without thirdparty
      *
