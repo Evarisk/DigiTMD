@@ -23,11 +23,13 @@
 
 // Load Dolibarr libraries
 require_once DOL_DOCUMENT_ROOT . '/societe/class/societe.class.php';
+require_once DOL_DOCUMENT_ROOT . '/contact/class/contact.class.php';
 require_once DOL_DOCUMENT_ROOT . '/ticket/class/ticket.class.php';
 require_once DOL_DOCUMENT_ROOT . '/core/lib/files.lib.php';
 
 // Load DoliTMD libraries
 require_once __DIR__ . '/tmd.class.php';
+require_once __DIR__ . '/../lib/dolitmd.lib.php';
 
 /**
  * Class TmdMailHandler
@@ -38,6 +40,11 @@ require_once __DIR__ . '/tmd.class.php';
  */
 class TmdMailHandler
 {
+    /**
+     * People of one mail made contacts of its ticket at most: a mail sent to a whole list never fills the contacts
+     */
+    public const MAX_COPIED_CONTACTS = 20;
+
     /**
      * @var DoliDB Database handler
      */
@@ -150,7 +157,7 @@ class TmdMailHandler
         $langs->load('dolitmd@dolitmd');
         $p         = $this->db->prefix();
         $mailboxId = (int) ($mailbox->id ?? $mailbox->rowid ?? 0);
-        $row       = $this->db->getRow('SELECT rowid, fk_account, message_id, in_reply_to, refs, date_mail, date_received, from_email, from_name, subject, snippet, requester_email FROM ' . $p . 'inbox_mail WHERE rowid = ' . $mailId . ' AND fk_account = ' . $mailboxId);
+        $row       = $this->db->getRow('SELECT rowid, fk_account, message_id, in_reply_to, refs, date_mail, date_received, from_email, from_name, to_text, cc_text, subject, snippet, requester_email FROM ' . $p . 'inbox_mail WHERE rowid = ' . $mailId . ' AND fk_account = ' . $mailboxId);
         if (!is_object($row)) {
             return 0;
         }
@@ -182,7 +189,7 @@ class TmdMailHandler
         // An answer about a request: a message of its ticket, never a new request
         $parentId = $this->findParentRequest($row);
         if ($parentId > 0) {
-            $this->appendReply($parentId, $row, $message, $sender, $dateMail, $author);
+            $this->appendReply($parentId, $row, $message, $sender, $dateMail, $author, $mailbox);
             return 0;
         }
 
@@ -218,6 +225,7 @@ class TmdMailHandler
         // Out of the transaction: a failure here keeps the ticket and the request
         $this->saveAttachments($ticket, $message);
         $this->linkMail($row, $ticket);
+        $this->addCopiedContacts($ticket, $row, $message, $mailbox, $author);
         require_once __DIR__ . '/tmdmailer.class.php';
         (new TmdMailer($this->db))->sendAck($tmd, $author);
 
@@ -309,9 +317,10 @@ class TmdMailHandler
      * @param  string            $sender   Address of the sender
      * @param  int               $dateMail Date of the mail
      * @param  User              $author   User
+     * @param  object            $mailbox  Mailbox (InboxAccount or its row: id or rowid, email)
      * @return bool
      */
-    protected function appendReply(int $parentId, object $row, $message, string $sender, int $dateMail, User $author): bool
+    protected function appendReply(int $parentId, object $row, $message, string $sender, int $dateMail, User $author, object $mailbox): bool
     {
         global $langs;
 
@@ -342,8 +351,178 @@ class TmdMailHandler
         }
         $this->saveAttachments($ticket, $message);
         $this->linkMail($row, $ticket);
+        $this->addCopiedContacts($ticket, $row, $message, $mailbox, $author, $sender);
 
         return true;
+    }
+
+    /**
+     * People of a mail (its recipients and copies, and the sender of an answer) made external contacts of the ticket:
+     * a message written from the ticket goes to all of them at once, as an answer to all. A known contact is used as
+     * it is, else one is created. Never the TMD mailbox, the address the tickets write from, the sender of the request
+     * (already the origin of the ticket) nor a robot
+     *
+     * @param  Ticket            $ticket  Ticket of the request
+     * @param  object            $row     Row of llx_inbox_mail (from_name, to_text, cc_text)
+     * @param  InboxMessage|null $message Mail parsed
+     * @param  object            $mailbox Mailbox (InboxAccount or its row: id or rowid, email)
+     * @param  User              $author  User
+     * @param  string            $sender  Sender of an answer, empty for the mail of the request
+     * @return int                        Contacts added to the ticket
+     */
+    protected function addCopiedContacts(Ticket $ticket, object $row, $message, object $mailbox, User $author, string $sender = ''): int
+    {
+        $known = [];
+        foreach ((array) $ticket->liste_contact(-1, 'external') as $contact) {
+            $known[(int) $contact['id']] = true;
+        }
+
+        $added = 0;
+        foreach ($this->mailPeople($row, $message, $mailbox, (string) $ticket->origin_email, $sender) as $person) {
+            $contactId = $this->copiedContact($person['email'], $person['name'], $ticket, $author);
+            if ($contactId <= 0 || isset($known[$contactId])) {
+                continue;
+            }
+            if ($ticket->add_contact($contactId, 'SUPPORTCLI', 'external') > 0) {
+                $known[$contactId] = true;
+                $added++;
+            } else {
+                dol_syslog(__METHOD__ . ' contact ' . $contactId . ' not added to ticket ' . $ticket->id . ': ' . $ticket->error, LOG_WARNING);
+            }
+        }
+
+        return $added;
+    }
+
+    /**
+     * People of a mail: its recipients and copies (and the sender of an answer), never the TMD mailbox, the address the
+     * tickets write from, the address left out (the sender of the request) nor a robot; MAX_COPIED_CONTACTS at most
+     *
+     * @param  object            $row     Row of llx_inbox_mail (from_name, to_text, cc_text)
+     * @param  InboxMessage|null $message Mail parsed, null for the recipients kept by Inbox in its index
+     * @param  object            $mailbox Mailbox (InboxAccount or its row: id or rowid, email)
+     * @param  string            $exclude Address left out: the sender of the request
+     * @param  string            $sender  Sender of an answer, empty for the mail of the request
+     * @return array<int,array{email:string,name:string}> Addresses in lower case
+     */
+    public function mailPeople(object $row, $message, object $mailbox, string $exclude, string $sender = ''): array
+    {
+        $people = [];
+        if (is_object($message) && (!empty($message->to) || !empty($message->cc))) {
+            $people = array_merge((array) $message->to, (array) $message->cc);
+        } elseif (dol_include_once('/inbox/class/inboxmimeparser.class.php') && class_exists('InboxMimeParser')) {
+            $people = InboxMimeParser::parseAddressList(trim((string) ($row->to_text ?? '') . ', ' . (string) ($row->cc_text ?? ''), ' ,'));
+        }
+        if ($sender !== '') {
+            array_unshift($people, ['email' => $sender, 'name' => (string) ($row->from_name ?? '')]);
+        }
+
+        $skip   = $this->ownAddresses($mailbox);
+        $skip[] = strtolower(trim($exclude));
+        $out    = [];
+        foreach ($people as $person) {
+            $email = strtolower(trim((string) ($person['email'] ?? '')));
+            if ($email === '' || isset($out[$email]) || in_array($email, $skip, true) || !isValidEmail($email) || preg_match('/^(no-?reply|do-?not-?reply|mailer-daemon|postmaster)@/i', $email)) {
+                continue;
+            }
+            if (count($out) >= self::MAX_COPIED_CONTACTS) {
+                dol_syslog(__METHOD__ . ' more than ' . self::MAX_COPIED_CONTACTS . ' people in mail ' . ($row->message_id ?? '') . ', the others are left out', LOG_WARNING);
+                break;
+            }
+            $out[$email] = ['email' => $email, 'name' => trim((string) ($person['name'] ?? ''))];
+        }
+
+        return array_values($out);
+    }
+
+    /**
+     * People in copy of the mail of a request (its recipients and copies, but the TMD mailbox and the sender): the mail
+     * « request done » goes to them too
+     *
+     * @param  Tmd $tmd TMD request
+     * @return array<int,array{email:string,name:string}>
+     */
+    public function requestCopies(Tmd $tmd): array
+    {
+        $mailbox = self::configuredMailbox($this->db);
+        if ($mailbox === null || empty($tmd->message_id)) {
+            return [];
+        }
+        $row = $this->db->getRow('SELECT message_id, from_name, to_text, cc_text FROM ' . $this->db->prefix() . 'inbox_mail WHERE fk_account = ' . ((int) $mailbox->rowid) . " AND message_id = '" . $this->db->escape((string) $tmd->message_id) . "' ORDER BY rowid ASC");
+
+        return is_object($row) ? $this->mailPeople($row, null, $mailbox, (string) $tmd->email_from) : [];
+    }
+
+    /**
+     * Contact of a person in copy: the known one, else a new one, on the thirdparty with this address, or on the one of
+     * the ticket when the address is of the company of the sender of the request, else without thirdparty
+     *
+     * @param  string $email  Address, lower case
+     * @param  string $name   Name given in the mail
+     * @param  Ticket $ticket Ticket of the request
+     * @param  User   $author User
+     * @return int            Id of the contact, 0 when none
+     */
+    protected function copiedContact(string $email, string $name, Ticket $ticket, User $author): int
+    {
+        global $conf, $langs;
+
+        [$socId, $contactId] = $this->findSender($email);
+        if ($contactId > 0) {
+            return $contactId;
+        }
+        if ($socId <= 0 && !empty($ticket->fk_soc)) {
+            $company = dolitmd_company_domain_label($email);
+            if ($company !== '' && $company === dolitmd_company_domain_label((string) $ticket->origin_email)) {
+                $socId = (int) $ticket->fk_soc;
+            }
+        }
+
+        // The name as written in the mail (« Leterrier Karine » as « Julien Selame »), else the start of the address
+        $name = trim($name, " \t\"'");
+        if ($name === '' || strpos($name, '@') !== false) {
+            $name = substr($email, 0, (int) strpos($email, '@'));
+        }
+
+        $contact               = new Contact($this->db);
+        $contact->lastname     = dol_trunc($name, 50, 'right', 'UTF-8', 1);
+        $contact->email        = $email;
+        $contact->socid        = $socId > 0 ? $socId : 0;
+        $contact->statut       = 1;
+        $contact->status       = 1;
+        $contact->priv         = 0;
+        $contact->entity       = $conf->entity;
+        $contact->note_private = $langs->transnoentities('TmdContactFromMail', $ticket->ref);
+        if ($contact->create($author) <= 0) {
+            dol_syslog(__METHOD__ . ' contact of ' . $email . ' not created: ' . $contact->error . ' ' . implode(', ', (array) $contact->errors), LOG_WARNING);
+            return 0;
+        }
+
+        return (int) $contact->id;
+    }
+
+    /**
+     * Addresses that are never people in copy: the TMD mailbox and its identities in Inbox, the address the messages of
+     * the tickets are written from
+     *
+     * @param  object   $mailbox Mailbox (InboxAccount or its row: id or rowid, email)
+     * @return string[]          Lower case
+     */
+    protected function ownAddresses(object $mailbox): array
+    {
+        $list      = [strtolower(trim((string) ($mailbox->email ?? '')))];
+        $mailboxId = (int) ($mailbox->id ?? $mailbox->rowid ?? 0);
+        if ($mailboxId > 0) {
+            $rows = $this->db->getRows('SELECT email FROM ' . $this->db->prefix() . 'inbox_identity WHERE fk_account = ' . $mailboxId . ' LIMIT 500');
+            foreach (is_array($rows) ? $rows : [] as $identity) {
+                $list[] = strtolower(trim((string) $identity->email));
+            }
+        }
+        if (preg_match_all('/[^\s<>,;"\']+@[^\s<>,;"\']+/', getDolGlobalString('TICKET_NOTIFICATION_EMAIL_FROM'), $matches)) {
+            $list = array_merge($list, array_map('strtolower', $matches[0]));
+        }
+
+        return array_values(array_unique(array_filter($list)));
     }
 
     /**
