@@ -427,11 +427,32 @@ class TmdMailHandler
         if (is_object($message) && (!empty($message->to) || !empty($message->cc))) {
             return array_merge((array) $message->to, (array) $message->cc);
         }
-        if (dol_include_once('/inbox/class/inboxmimeparser.class.php') && class_exists('InboxMimeParser')) {
-            return InboxMimeParser::parseAddressList(trim((string) ($row->to_text ?? '') . ', ' . (string) ($row->cc_text ?? ''), ' ,'));
+
+        return self::parseAddressText((string) ($row->to_text ?? '') . ', ' . (string) ($row->cc_text ?? ''));
+    }
+
+    /**
+     * Addresses of a text (« Name <a@b.c>, "Last, First" <d@e.f>; g@h.i »), the names given kept. Read here, never with
+     * a function of Inbox: its classes change from a version to another
+     *
+     * @param  string $text Text of addresses
+     * @return array<int,array{email:string,name:string}> Addresses in lower case, once each, valid ones only
+     */
+    public static function parseAddressText(string $text): array
+    {
+        $out = [];
+        if (preg_match_all('/(?:"([^"]*)"|([^,;<>"]*?))\s*<\s*([^<>\s,;]+@[^<>\s,;]+)\s*>|([^\s<>,;"\']+@[^\s<>,;"\']+)/u', $text, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $email = strtolower(trim((string) (($match[3] ?? '') !== '' ? $match[3] : ($match[4] ?? ''))));
+                if ($email === '' || isset($out[$email]) || !isValidEmail($email)) {
+                    continue;
+                }
+                $name        = trim(($match[1] ?? '') !== '' ? $match[1] : ($match[2] ?? ''));
+                $out[$email] = ['email' => $email, 'name' => strpos($name, '@') === false ? $name : ''];
+            }
         }
 
-        return [];
+        return array_values($out);
     }
 
     /**
