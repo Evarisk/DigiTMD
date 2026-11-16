@@ -63,6 +63,10 @@ if (isModEnabled('category') && $user->hasRight('categorie', 'lire')) {
     $langs->load('categories');
     $socTags = $socForm->multiselectarray('custcats', $socForm->select_all_categories(Categorie::TYPE_CUSTOMER, '', '', 64, 0, 3), [], 0, 0, '', 0, 0);
 }
+
+// An existing thirdparty to link instead of a new one: the selector of the core (a search by AJAX when the setup asks for
+// it), named existing_socid, never socid (the creation reads socid as the thirdparty chosen)
+$socExisting = $user->hasRight('societe', 'lire') ? $socForm->select_company('', 'existing_socid', '', 'SelectThirdParty', 0, 0, [], 0, 'minwidth300') : '';
 ?>
 <?php // Saturne closes a modal on a click on its backdrop, a selection released there included: closed by its buttons only ?>
 <div class="wpeo-modal dolitmd-soc-modal modal-close-only-with-button" id="dolitmd-soc-modal"
@@ -70,11 +74,23 @@ if (isModEnabled('category') && $user->hasRight('categorie', 'lire')) {
      data-error="<?php echo dol_escape_htmltag($langs->transnoentities('TmdThirdpartyError')); ?>">
     <div class="modal-container">
         <div class="modal-header">
-            <h2 class="modal-title"><i class="fas fa-building pictofixedwidth"></i><?php echo dol_escape_htmltag($langs->trans('TmdCreateThirdparty')); ?></h2>
+            <h2 class="modal-title"><i class="fas fa-building pictofixedwidth"></i><?php echo dol_escape_htmltag($langs->trans('TmdSenderThirdparty')); ?></h2>
             <div class="modal-close"><i class="fas fa-times"></i></div>
         </div>
         <div class="modal-content">
             <form class="dolitmd-soc-form" id="dolitmd-soc-form" autocomplete="off">
+                <?php if ($socExisting !== '') { ?>
+                    <?php // The thirdparty may be known already: linked to it, never created twice ?>
+                    <div class="dolitmd-soc-field dolitmd-soc-field--full dolitmd-soc-existing">
+                        <label for="existing_socid"><?php echo dol_escape_htmltag($langs->trans('TmdLinkExistingThirdparty')); ?></label>
+                        <div class="dolitmd-soc-existing-row">
+                            <?php echo $socExisting; ?>
+                            <button type="button" class="wpeo-button button-blue no-load dolitmd-soc-link-existing" data-empty="<?php echo dol_escape_htmltag($langs->transnoentities('TmdChooseThirdparty')); ?>"><i class="fas fa-link"></i>&nbsp;<?php echo dol_escape_htmltag($langs->trans('TmdLinkButton')); ?></button>
+                        </div>
+                        <p class="dolitmd-soc-help opacitymedium"><?php echo dol_escape_htmltag($langs->trans('TmdLinkExistingHelp')); ?></p>
+                    </div>
+                    <div class="dolitmd-soc-separator"><span><?php echo dol_escape_htmltag($langs->trans('TmdOrCreateThirdparty')); ?></span></div>
+                <?php } ?>
                 <div class="dolitmd-soc-field dolitmd-soc-field--full">
                     <label class="fieldrequired" for="dolitmd-soc-name"><?php echo dol_escape_htmltag($langs->trans('ThirdPartyName')); ?></label>
                     <input type="text" id="dolitmd-soc-name" class="dolitmd-soc-name" name="name" maxlength="128" required>

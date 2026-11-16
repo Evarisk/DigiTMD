@@ -49,6 +49,7 @@ window.dolitmd.tmd.event = function() {
   $(document).on('click', '.dolitmd-sender-create', window.dolitmd.tmd.openThirdpartyModal);
   $(document).on('submit', '.dolitmd-soc-form', window.dolitmd.tmd.createThirdparty);
   $(document).on('click', '.dolitmd-soc-link', window.dolitmd.tmd.linkThirdparty);
+  $(document).on('click', '.dolitmd-soc-link-existing', window.dolitmd.tmd.linkExistingThirdparty);
   $(document).on('keydown', '.select2-container, .dolitmd-soc-modal', window.dolitmd.tmd.thirdpartyModalEscape);
 };
 
@@ -184,6 +185,8 @@ window.dolitmd.tmd.openThirdpartyModal = function() {
 
   // Fields of the previous sender emptied, country and type back to their default
   modal.find('.dolitmd-soc-form')[0].reset();
+  // The existing thirdparty chosen for the previous sender: a hidden field (search by AJAX) is not emptied by the reset
+  modal.find('input[type="hidden"][name="existing_socid"], #search_existing_socid').val('');
   // The selects are drawn by select2 on these pages: shown again with the value the reset gave them
   modal.find('select').trigger('change.select2');
   modal.data('id', button.data('id')).removeData('socid');
@@ -198,14 +201,24 @@ window.dolitmd.tmd.openThirdpartyModal = function() {
 /**
  * Escape closes the modal of the thirdparty, a field focused or not (Saturne would not close it then), but an Escape
  * that only closed a list of the modal (select2, autocompletion of the zip code: they prevent its default) leaves it
- * open with the fields typed
+ * open with the fields typed. Enter in a list of the modal chooses its option, never closes the modal
  *
  * @param   {KeyboardEvent} event Key pressed
  * @returns {void}
  */
 window.dolitmd.tmd.thirdpartyModalEscape = function(event) {
   const modal = $('#dolitmd-soc-modal');
-  if (event.key !== 'Escape' || !modal.hasClass('modal-active')) {
+  if (!modal.hasClass('modal-active')) {
+    return;
+  }
+
+  // Enter that chose an option of a list (select2 gives the focus back to its box first): Saturne would take it for an
+  // Enter out of the fields and click the first button of the footer, Cancel
+  if (event.key === 'Enter' && $(event.target).closest('.select2-container').length) {
+    event.stopPropagation();
+    return;
+  }
+  if (event.key !== 'Escape') {
     return;
   }
 
@@ -246,7 +259,7 @@ window.dolitmd.tmd.thirdpartyError = function(modal, message, existing) {
  * @returns {void}
  */
 window.dolitmd.tmd.thirdpartySaving = function(modal, saving) {
-  modal.find('.dolitmd-soc-save, .dolitmd-soc-link').prop('disabled', saving).toggleClass('button-disable', saving);
+  modal.find('.dolitmd-soc-save, .dolitmd-soc-link, .dolitmd-soc-link-existing').prop('disabled', saving).toggleClass('button-disable', saving);
 };
 
 /**
@@ -281,6 +294,22 @@ window.dolitmd.tmd.linkThirdparty = function() {
   const modal = $('#dolitmd-soc-modal');
 
   window.dolitmd.tmd.sendThirdparty(modal, {socid: modal.data('socid')});
+};
+
+/**
+ * An existing thirdparty chosen: the requests of the address linked to it, never a new one
+ *
+ * @returns {void}
+ */
+window.dolitmd.tmd.linkExistingThirdparty = function() {
+  const modal = $('#dolitmd-soc-modal');
+  const socId = parseInt(modal.find('[name="existing_socid"]').val(), 10);
+
+  if (!(socId > 0)) {
+    window.dolitmd.tmd.thirdpartyError(modal, $(this).data('empty'), null);
+    return;
+  }
+  window.dolitmd.tmd.sendThirdparty(modal, {socid: socId});
 };
 
 /**

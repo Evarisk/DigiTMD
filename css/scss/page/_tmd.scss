@@ -402,6 +402,42 @@ body#mainbody .dolitmd-sender-create {
       display: none;
     }
   }
+
+  // An existing thirdparty: its selector and the button to link it, side by side
+  .dolitmd-soc-existing-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    > * {
+      min-width: 0;
+    }
+
+    .wpeo-button {
+      flex: none;
+    }
+  }
+
+  // Between the thirdparty to link and the one to create
+  .dolitmd-soc-separator {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--saturne-faint, #9aa3af);
+
+    &::before,
+    &::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--saturne-border, #e5e7eb);
+    }
+  }
 }
 
 // Column of the identifier of the TMD software: stands out as the reference to type

@@ -135,10 +135,12 @@ if ($action == 'create_thirdparty') {
     $contactId  = 0;
     $created    = false;
     if ($socId > 0) {
-        // The thirdparty of the same name, chosen in the modal
+        // An existing thirdparty chosen in the modal (searched, or the one of the same name): the address of the sender
+        // becomes one of its contacts, so that his next mails find it by themselves
         if (!$user->hasRight('societe', 'lire') || $thirdparty->fetch($socId) <= 0 || !in_array((int) $thirdparty->entity, array_map('intval', explode(',', getEntity('societe'))), true)) {
             dolitmd_ajax_reply(404, ['success' => false, 'error' => $langs->transnoentities('ErrorRecordNotFound')]);
         }
+        $contactId = (new TmdMailHandler($db))->senderContact($object, $socId, $user);
     } else {
         if (!dolitmd_can_create_thirdparty($user)) {
             dolitmd_ajax_reply(403, ['success' => false, 'error' => $langs->transnoentities('NotEnoughPermissions')]);
