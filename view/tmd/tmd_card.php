@@ -126,9 +126,8 @@ if (empty($resHook)) {
             }
 
             if ($error === '') {
-                // Sent: the request is done (the ticket closed), without the automatic mail of the tick
+                // Sent: the request is done (the ticket closed)
                 if (empty($object->done)) {
-                    $object->context['dolitmd_done_mail_sent'] = 1;
                     // Closing the ticket prints warnings of the core 24 (Ticket::listeContact): never before the redirect
                     ob_start();
                     $result = $object->setFlag($user, 'done', 1);

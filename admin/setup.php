@@ -179,7 +179,8 @@ print load_fiche_titre($langs->trans('TmdSetupMails'), '<a href="' . dol_escape_
 print '<span class="opacitymedium">' . $langs->trans('TmdSetupMailsHelp') . '</span>';
 print '<table class="noborder centpercent margintoponly">';
 print '<tr class="liste_titre"><td>' . $langs->trans('Parameters') . '</td><td>' . $langs->trans('Description') . '</td><td class="center">' . $langs->trans('Status') . '</td></tr>';
-foreach (['ack' => 'TmdSetupMailAck', 'done' => 'TmdSetupMailDone', 'late' => 'TmdSetupMailLate'] as $mail => $label) {
+// The mail « request done » is not there: never automatic, it leaves from the button of the card once read again
+foreach (['ack' => 'TmdSetupMailAck', 'late' => 'TmdSetupMailLate'] as $mail => $label) {
     print '<tr class="oddeven"><td><span class="nowraponall">' . $langs->trans($label) . '</span></td>';
     print '<td><span class="wordbreak">' . $langs->trans($label . 'Help') . '</span></td>';
     print '<td class="center">' . ajax_constantonoff(TmdMailer::MAILS[$mail]['const']) . '</td>';

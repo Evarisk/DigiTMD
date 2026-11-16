@@ -32,10 +32,12 @@ require_once __DIR__ . '/tmd.class.php';
 /**
  * Class TmdMailer
  *
- * Each mail is off until switched on in the setup, and written from its template (Setup > Emails > Templates, type
- * « TMD requests »). Sent by the server of the TMD mailbox (module Inbox) when there is one: the sender sees the TMD
- * address, his answer comes back in the same conversation (In-Reply-To). Else by the mail setup of Dolibarr.
- * The nomeref ID is internal: never offered to the templates.
+ * Each mail is written from its template (Setup > Emails > Templates, type « TMD requests »). The receipt and the
+ * reminder of the late requests are automatic, off until switched on in the setup; the mail « request done » is never
+ * automatic: it leaves from the button of the card (or the API), once read again. Sent by the server of the TMD
+ * mailbox (module Inbox) when there is one: the sender sees the TMD address, his answer comes back in the same
+ * conversation (In-Reply-To). Else by the mail setup of Dolibarr. The nomeref ID is internal: never offered to the
+ * templates.
  */
 class TmdMailer
 {
@@ -45,11 +47,12 @@ class TmdMailer
     public const TEMPLATE_TYPE = 'dolitmd_tmd';
 
     /**
-     * The mails: constant switching them on, label of their template
+     * The mails: constant switching on the automatic ones (none for « request done », sent by hand), label of their
+     * template
      */
     public const MAILS = [
         'ack'  => ['const' => 'DOLITMD_MAIL_ACK', 'template' => '(TmdMailAckTemplate)'],
-        'done' => ['const' => 'DOLITMD_MAIL_DONE', 'template' => '(TmdMailDoneTemplate)'],
+        'done' => ['const' => '', 'template' => '(TmdMailDoneTemplate)'],
         'late' => ['const' => 'DOLITMD_MAIL_LATE', 'template' => '(TmdMailLateTemplate)'],
     ];
 
@@ -88,29 +91,6 @@ class TmdMailer
     public function sendAck(Tmd $tmd, User $user): bool
     {
         return $this->sendToSender('ack', $tmd, $user, 'auto-replied');
-    }
-
-    /**
-     * Mail « request done » when the request is ticked done, if the setup asks for it: as the one sent from the card,
-     * to the sender and the people in copy of his mail, the documents of the request attached
-     *
-     * @param  Tmd  $tmd  TMD request
-     * @param  User $user User ticking done
-     * @return bool       Sent
-     */
-    public function sendDone(Tmd $tmd, User $user): bool
-    {
-        if (!getDolGlobalInt(self::MAILS['done']['const']) || !isValidEmail((string) $tmd->email_from)) {
-            return false;
-        }
-        if ($this->template('done') === null) {
-            $this->error = 'Template ' . self::MAILS['done']['template'] . ' not found';
-            dol_syslog(__METHOD__ . ' ' . $this->error, LOG_WARNING);
-            return false;
-        }
-        $draft = $this->doneDraft($tmd);
-
-        return $this->sendDoneMail($tmd, $user, self::parseAddresses($draft['to']), $draft['cc'], $draft['subject'], $draft['html'], array_column($draft['files'], 'name'), true);
     }
 
     /**
@@ -153,10 +133,9 @@ class TmdMailer
      * @param  string                                    $subject Subject
      * @param  string                                    $html    HTML
      * @param  string[]                                  $files   Names of documents of the request (tab Documents)
-     * @param  bool                                      $auto    Sent by ticking done, not by a person (Auto-Submitted)
      * @return bool                                               Sent
      */
-    public function sendDoneMail(Tmd $tmd, User $user, array $to, array $cc, string $subject, string $html, array $files, bool $auto = false): bool
+    public function sendDoneMail(Tmd $tmd, User $user, array $to, array $cc, string $subject, string $html, array $files): bool
     {
         global $langs;
 
@@ -197,7 +176,7 @@ class TmdMailer
         $cc = $named($cc);
 
         $ticket = $this->ticketOf($tmd);
-        if (!$this->sendFull($to, $cc, $subject, $html, (string) $tmd->message_id, $attachments, $ticket, $auto)) {
+        if (!$this->sendFull($to, $cc, $subject, $html, (string) $tmd->message_id, $attachments, $ticket)) {
             return false;
         }
 
@@ -634,10 +613,9 @@ class TmdMailer
      * @param  string                                                         $inReplyTo   Message-ID of the mail of the request, without the angle brackets
      * @param  array<int,array{name:string,size:int,date:int,fullname:string}> $attachments Files
      * @param  Ticket|null                                                    $ticket      Ticket (track id of Dolibarr)
-     * @param  bool                                                           $auto        Header Auto-Submitted (RFC 3834)
      * @return bool
      */
-    protected function sendFull(array $to, array $cc, string $subject, string $html, string $inReplyTo, array $attachments, ?Ticket $ticket, bool $auto): bool
+    protected function sendFull(array $to, array $cc, string $subject, string $html, string $inReplyTo, array $attachments, ?Ticket $ticket): bool
     {
         global $langs;
 
@@ -646,7 +624,6 @@ class TmdMailer
             $this->error = $langs->transnoentities('TmdMailsDisabled');
             return false;
         }
-        $auto = $auto ? "Auto-Submitted: auto-generated\r\nX-Auto-Response-Suppress: All\r\n" : '';
 
         require_once __DIR__ . '/tmdmailhandler.class.php';
         $mailbox = TmdMailHandler::configuredMailbox($this->db);
@@ -683,7 +660,7 @@ class TmdMailer
                     $this->error = 'No sending server for the TMD mailbox';
                     return false;
                 }
-                if (!$connector->send($auto . $built['wire'], ['from' => $builder->from['email'], 'recipients' => $built['recipients']])) {
+                if (!$connector->send($built['wire'], ['from' => $builder->from['email'], 'recipients' => $built['recipients']])) {
                     $this->error = method_exists($connector, 'getError') ? (string) $connector->getError() : 'Mail refused by the server of the TMD mailbox';
                     $connector->disconnect();
                     dol_syslog(__METHOD__ . ' mail not sent by the TMD mailbox: ' . $this->error, LOG_WARNING);
@@ -693,7 +670,7 @@ class TmdMailer
                 $sentByServer = method_exists($account, 'sentCopyByServer') && $account->sentCopyByServer();
                 if (!$sentByServer && class_exists('InboxComposer') && method_exists('InboxComposer', 'roleFolder') && method_exists($connector, 'importRaw')) {
                     $sent = (string) (new InboxComposer($this->db))->roleFolder($account, 'sent');
-                    if ($sent !== '' && $connector->importRaw($sent, $auto . $built['raw'], ['\\Seen']) === null) {
+                    if ($sent !== '' && $connector->importRaw($sent, $built['raw'], ['\\Seen']) === null) {
                         dol_syslog(__METHOD__ . ' copy in Sent failed', LOG_WARNING);
                     }
                 }
@@ -707,7 +684,7 @@ class TmdMailer
         require_once DOL_DOCUMENT_ROOT . '/core/class/CMailFile.class.php';
         $page = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' . $html . '</body></html>';
         $mail = new CMailFile($subject, self::addressesText($to), getDolGlobalString('MAIN_MAIL_EMAIL_FROM'), $page, array_column($attachments, 'fullname'), array_map('dol_mimetype', array_column($attachments, 'name')),
-            array_column($attachments, 'name'), self::addressesText($cc), '', 0, 1, '', '', $ticket ? 'tic' . $ticket->id : '', $auto, 'standard', '', '', $inReplyTo, $inReplyTo);
+            array_column($attachments, 'name'), self::addressesText($cc), '', 0, 1, '', '', $ticket ? 'tic' . $ticket->id : '', '', 'standard', '', '', $inReplyTo, $inReplyTo);
         if ($mail->sendfile()) {
             return true;
         }

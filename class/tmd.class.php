@@ -522,14 +522,10 @@ class Tmd extends SaturneObject
         $this->stampFlags($user, is_object($before) ? $before : null);
 
         $result = parent::update($user, $noTrigger);
-        // Done now, or pending again: the ticket follows (closed as solved, opened again)
+        // Done now, or pending again: the ticket follows (closed as solved, opened again). Never a mail: the mail
+        // « request done » leaves from the button of the card only (TmdMailer::sendDoneMail()), once read again
         if ($result > 0 && is_object($before) && (int) $before->done !== (int) $this->done) {
             $this->syncTicket($user);
-            // Done now: the sender is told, when the setup asks for it (never twice: done by sending this mail)
-            if ($this->done && empty($this->context['dolitmd_done_mail_sent'])) {
-                require_once __DIR__ . '/tmdmailer.class.php';
-                (new TmdMailer($this->db))->sendDone($this, $user);
-            }
         }
 
         return $result;
