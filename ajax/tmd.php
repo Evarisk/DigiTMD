@@ -97,15 +97,18 @@ global $conf;
 $object   = new Tmd($db);
 $found    = $id > 0 ? $object->fetch($id) : 0;
 $entities = array_map('intval', explode(',', (string) getEntity($object->element)));
-$refusal  = '';
+// Its entity read in the database: without the module Multicompany, Saturne takes the field entity out of the object,
+// which stays empty once fetched
+$saved   = $found > 0 ? $db->getRow('SELECT entity FROM ' . $db->prefix() . $object->table_element . ' WHERE rowid = ' . ((int) $object->id)) : null;
+$refusal = '';
 if ($id <= 0) {
     $refusal = 'no id';
 } elseif ($found <= 0) {
     $refusal = 'fetch ' . $found . trim(' ' . $object->error . ' ' . implode(' ', (array) $object->errors) . ' ' . $db->lasterror());
 } elseif ((int) $object->status === Tmd::STATUS_DELETED) {
     $refusal = 'deleted';
-} elseif (!in_array((int) $object->entity, $entities, true)) {
-    $refusal = 'entity ' . ((int) $object->entity) . ' not in ' . implode(',', $entities) . ', current entity ' . ((int) $conf->entity);
+} elseif (!is_object($saved) || !in_array((int) $saved->entity, $entities, true)) {
+    $refusal = 'entity ' . (is_object($saved) ? (int) $saved->entity : '?') . ' not in ' . implode(',', $entities) . ', current entity ' . ((int) $conf->entity);
 }
 if ($refusal !== '') {
     dol_syslog('dolitmd ajax/tmd.php: request ' . $id . ' refused: ' . $refusal, LOG_WARNING);
