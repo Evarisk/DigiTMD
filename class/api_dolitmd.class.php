@@ -213,8 +213,8 @@ class Dolitmd extends DolibarrApi
      * Change a TMD request
      *
      * Same fields as for the creation. The state changes with « state » (pending, done, invoiced) or the ticks « done »
-     * and « invoiced » (invoiced means done): the ticket of the request is closed or opened again, and the mail
-     * « request done » leaves if the setup asks for it, as when the box is ticked in the list.
+     * and « invoiced » (invoiced means done): the ticket of the request is closed or opened again. No mail leaves: the
+     * mail « request done » is sent by POST {id}/senddone.
      *
      * @param  int   $id           ID of the request
      * @param  array $request_data Fields to change
@@ -251,8 +251,8 @@ class Dolitmd extends DolibarrApi
     /**
      * Change the state of a TMD request: pending, done or invoiced
      *
-     * As the state chosen in the list: the ticket of the request is closed (done) or opened again (pending), the mail
-     * « request done » leaves if the setup asks for it.
+     * As the state chosen in the list: the ticket of the request is closed (done) or opened again (pending). No mail
+     * leaves: the mail « request done » is sent by POST {id}/senddone.
      *
      * Example: { "state": "done" }
      *
@@ -344,9 +344,8 @@ class Dolitmd extends DolibarrApi
         if (!$sent) {
             throw new RestException(500, 'Mail not sent: ' . $mailer->error);
         }
-        // Sent: the request is done, without the automatic mail of the tick
+        // Sent: the request is done
         if (empty($this->tmd->done)) {
-            $this->tmd->context['dolitmd_done_mail_sent'] = 1;
             $this->quietly(function () {
                 return $this->tmd->setFlag(DolibarrApiAccess::$user, 'done', 1);
             });

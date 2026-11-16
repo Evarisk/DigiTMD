@@ -91,9 +91,25 @@ if (!empty($user->socid) || !$user->hasRight('dolitmd', 'tmd', 'write')) {
 
 $id = GETPOSTINT('id');
 
-$object = new Tmd($db);
-if ($id <= 0 || $object->fetch($id) <= 0 || (int) $object->status === Tmd::STATUS_DELETED || !in_array((int) $object->entity, array_map('intval', explode(',', getEntity($object->element))), true)) {
-    dolitmd_ajax_reply(404, ['success' => false, 'error' => $langs->transnoentities('ErrorRecordNotFound')]);
+// A request of the entities of the user, never a deleted one. Each refusal says why (in the answer and in the log): a
+// request refused while its card opens has to be explained without a debugger
+global $conf;
+$object   = new Tmd($db);
+$found    = $id > 0 ? $object->fetch($id) : 0;
+$entities = array_map('intval', explode(',', (string) getEntity($object->element)));
+$refusal  = '';
+if ($id <= 0) {
+    $refusal = 'no id';
+} elseif ($found <= 0) {
+    $refusal = 'fetch ' . $found . trim(' ' . $object->error . ' ' . implode(' ', (array) $object->errors) . ' ' . $db->lasterror());
+} elseif ((int) $object->status === Tmd::STATUS_DELETED) {
+    $refusal = 'deleted';
+} elseif (!in_array((int) $object->entity, $entities, true)) {
+    $refusal = 'entity ' . ((int) $object->entity) . ' not in ' . implode(',', $entities) . ', current entity ' . ((int) $conf->entity);
+}
+if ($refusal !== '') {
+    dol_syslog('dolitmd ajax/tmd.php: request ' . $id . ' refused: ' . $refusal, LOG_WARNING);
+    dolitmd_ajax_reply(404, ['success' => false, 'error' => $langs->transnoentities('ErrorRecordNotFound') . ' (' . $refusal . ')']);
 }
 
 if ($action == 'create_thirdparty') {
