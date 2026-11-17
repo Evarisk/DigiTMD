@@ -831,14 +831,15 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * nomeref ID in the name of a document: the number starting with X (« PB ADR FRANCE X1640869.pdf » → X1640869)
+     * nomeref ID in the name of a document: the number starting with X or E (« PB ADR FRANCE X1640869.pdf » → X1640869,
+     * « PB8 ADR ESPAGNE E0289516.pdf » → E0289516)
      *
      * @param  string $fileName Name of the file
      * @return string           ID in upper case, empty when the name has none
      */
     public static function softwareRefFromFileName(string $fileName): string
     {
-        return preg_match('/(?<![A-Za-z0-9])X\d{5,}(?![0-9])/i', pathinfo($fileName, PATHINFO_FILENAME), $matches) ? strtoupper($matches[0]) : '';
+        return preg_match('/(?<![A-Za-z0-9])[XE]\d{5,}(?![0-9])/i', pathinfo($fileName, PATHINFO_FILENAME), $matches) ? strtoupper($matches[0]) : '';
     }
 
     /**
@@ -865,8 +866,8 @@ class Tmd extends SaturneObject
 
     /**
      * Request without nomeref ID: taken from the documents already in its tab Documents, the oldest document with a
-     * number in X first. Without the trigger of the document (added before this was done, or by another way than the
-     * tab): at the display of the card and by the scheduled job
+     * number in X or E first. Without the trigger of the document (added before this was done, or by another way than
+     * the tab): at the display of the card and by the scheduled job
      *
      * @param  User $user User filling
      * @return bool       ID filled
@@ -891,7 +892,7 @@ class Tmd extends SaturneObject
 
     /**
      * Requests still without nomeref ID: taken from the documents already in their tab Documents, the oldest document
-     * with a number in X first (the documents added before this was done, or by another way than the tab)
+     * with a number in X or E first (the documents added before this was done, or by another way than the tab)
      *
      * @param  User $user  User of the scheduled job
      * @param  int  $limit Requests looked at, at most
