@@ -864,6 +864,55 @@ class Tmd extends SaturneObject
     }
 
     /**
+     * Request without nomeref ID: taken from the documents already in its tab Documents, the oldest document with a
+     * number in X first. Without the trigger of the document (added before this was done, or by another way than the
+     * tab): at the display of the card and by the scheduled job
+     *
+     * @param  User $user User filling
+     * @return bool       ID filled
+     */
+    public function fillSoftwareRefFromDocuments(User $user): bool
+    {
+        if ($this->id <= 0 || trim((string) $this->software_ref) !== '' || (int) $this->status === self::STATUS_DELETED) {
+            return false;
+        }
+        $files = $this->getPublicFiles();
+        usort($files, static function ($a, $b) {
+            return $a['date'] <=> $b['date'];
+        });
+        foreach ($files as $file) {
+            if (self::softwareRefFromFileName($file['name']) !== '') {
+                return $this->fillSoftwareRefFromFile($user, $file['name']);
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Requests still without nomeref ID: taken from the documents already in their tab Documents, the oldest document
+     * with a number in X first (the documents added before this was done, or by another way than the tab)
+     *
+     * @param  User $user  User of the scheduled job
+     * @param  int  $limit Requests looked at, at most
+     * @return int         IDs filled
+     */
+    public function fillMissingSoftwareRefs(User $user, int $limit = 200): int
+    {
+        $rows = $this->db->getRows('SELECT rowid FROM ' . $this->db->prefix() . $this->table_element . ' WHERE entity IN (' . getEntity($this->element) . ')'
+            . " AND status <> " . self::STATUS_DELETED . " AND (software_ref IS NULL OR software_ref = '') ORDER BY rowid DESC LIMIT " . max(1, $limit));
+        $filled = 0;
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            $tmd = new self($this->db);
+            if ($tmd->fetch((int) $row->rowid) > 0 && $tmd->fillSoftwareRefFromDocuments($user)) {
+                $filled++;
+            }
+        }
+
+        return $filled;
+    }
+
+    /**
      * Choose the state, then save: the ticks follow (pending or subcontracted = none, done = done, invoiced = done and
      * invoiced)
      *
