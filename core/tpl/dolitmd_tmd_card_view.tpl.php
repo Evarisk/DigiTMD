@@ -52,11 +52,12 @@ require DOL_DOCUMENT_ROOT . '/core/tpl/commonfields_view.tpl.php';
 print '</table>';
 print '</div>';
 
-// Customer tracking: the public page of the request (link of the mails), its number, the documents the customer sees
+// Right column: the customer tracking (public page of the request, link of the mails, its number, the documents the
+// customer sees), then the mail of the customer and the messages of its ticket
 $publicUrl = $object->getPublicUrl();
+print '<div class="fichehalfright">';
 if ($publicUrl !== '') {
     $nbPublicFiles = count($object->getPublicFiles());
-    print '<div class="fichehalfright">';
     print '<div class="underbanner clearboth"></div>';
     print '<table class="border centpercent tableforfield">';
     print '<tr><td class="titlefield">' . $form->textwithpicto($langs->trans('TmdTrackId'), $langs->trans('TmdPublicTrackingHelp')) . '</td><td><span class="dolitmd-tracking-number">' . showValueWithClipboardCPButton((string) $object->track_id, 0) . '</span></td></tr>';
@@ -68,8 +69,10 @@ if ($publicUrl !== '') {
     print '<a href="' . dol_escape_htmltag(dol_buildpath('/saturne/view/saturne_document.php', 1) . '?id=' . $object->id . '&module_name=DoliTMD&object_type=tmd') . '">' . img_picto('', 'file', 'class="pictofixedwidth"') . $langs->trans('TmdPublicDocumentsShared', $nbPublicFiles) . '</a>';
     print '</td></tr>';
     print '</table>';
-    print '</div>';
 }
+// The mail of the customer and the messages of its ticket, without opening the ticket
+include __DIR__ . '/dolitmd_tmd_card_request.tpl.php';
+print '</div>';
 
 print '</div>';
 print '<div class="clearboth"></div>';
