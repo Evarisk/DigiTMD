@@ -725,7 +725,8 @@ class TmdMailHandler
     /**
      * Scheduled job: fetches the mails of the TMD mailbox (Inbox), then makes the ticket and the request of each mail
      * received since the mailbox was chosen that has none yet. Enough by itself: neither the scheduled job of Inbox
-     * nor its trigger INBOX_MAIL_RECEIVED are needed
+     * nor its trigger INBOX_MAIL_RECEIVED are needed. First, the requests without nomeref ID take it from the
+     * documents already in their tab Documents
      *
      * @return int 0 if OK, < 0 if KO
      */
@@ -733,10 +734,11 @@ class TmdMailHandler
     {
         global $conf, $user;
 
+        $filled       = (new Tmd($this->db))->fillMissingSoftwareRefs($user);
         $this->output = '';
         $mailbox      = self::configuredMailbox($this->db);
         if ($mailbox === null) {
-            $this->output = 'No TMD mailbox';
+            $this->output = 'No TMD mailbox, ' . $filled . ' nomeref ID(s) taken from documents';
             return 0;
         }
         $fetched = $this->syncMailbox((int) $mailbox->rowid);
@@ -755,7 +757,7 @@ class TmdMailHandler
         $sql  .= ' ORDER BY m.date_received ASC LIMIT 50';
         $rows  = $this->db->getRows($sql);
         if (!is_array($rows) || empty($rows)) {
-            $this->output = $fetched . ', 0 request';
+            $this->output = $fetched . ', 0 request, ' . $filled . ' nomeref ID(s) taken from documents';
             return 0;
         }
 
@@ -763,7 +765,7 @@ class TmdMailHandler
         $created     = $this->handleReceived($mailbox, array_map(static function ($r) {
             return (int) $r->rowid;
         }, $rows), $user);
-        $this->output = $fetched . ', ' . $created . ' request(s) created' . ($this->errors ? ', errors: ' . implode(', ', $this->errors) : '');
+        $this->output = $fetched . ', ' . $created . ' request(s) created, ' . $filled . ' nomeref ID(s) taken from documents' . ($this->errors ? ', errors: ' . implode(', ', $this->errors) : '');
 
         return $this->errors ? -1 : 0;
     }
