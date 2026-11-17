@@ -170,6 +170,8 @@ class ActionsDolitmd
         $cards  = [
             ['id' => 'late', 'label' => $langs->transnoentities('TmdLate'), 'value' => (string) $late, 'icon' => 'fas fa-exclamation-triangle', 'color' => $late > 0 ? 'red' : 'grey'],
             ['id' => 'pending', 'label' => $langs->transnoentities('TmdStatusPending'), 'value' => (string) $counts[Tmd::STATUS_PENDING], 'icon' => 'fas fa-hourglass-half', 'color' => 'yellow'],
+            // Violet: a colour of DoliTMD (css/scss/page/_tmd.scss), Saturne has none
+            ['id' => 'subcontracted', 'label' => $langs->transnoentities('TmdStatusSubcontracted'), 'value' => (string) $counts[Tmd::STATUS_SUBCONTRACTED], 'icon' => 'fas fa-people-arrows', 'color' => 'purple'],
             ['id' => 'done', 'label' => $langs->transnoentities('TmdStatusDoneToInvoice'), 'value' => (string) $counts[Tmd::STATUS_DONE], 'icon' => 'fas fa-check', 'color' => 'green'],
             ['id' => 'invoiced', 'label' => $langs->transnoentities('TmdStatusInvoiced'), 'value' => (string) $counts[Tmd::STATUS_INVOICED], 'icon' => 'fas fa-file-invoice-dollar', 'color' => 'grey'],
             ['id' => 'total', 'label' => $langs->transnoentities('TmdRequests'), 'value' => (string) $total, 'icon' => 'fas fa-truck-moving', 'color' => 'blue'],
@@ -184,15 +186,22 @@ class ActionsDolitmd
         $category   = Tmd::normalizeCategory(GETPOST('search_category', 'alpha'));
         $listUrl   .= $category !== null ? '&search_category=' . urlencode($category) : '';
         $presets    = [['label' => $langs->transnoentities('TmdAll'), 'url' => $listUrl . ($category !== null ? '' : '&button_removefilter=1'), 'icon' => 'fas fa-list', 'active' => empty($selected) && !$lateActive]];
-        // Late: not done, deadline yesterday at the latest (the filters of the list: follow-up and deadline)
+        // Late: not done, deadline yesterday at the latest (the filters of the list: follow-up and deadline), never a
+        // subcontracted one (the state pending)
         $yesterday  = dol_time_plus_duree(dol_now(), -1, 'd');
         $presets[]  = [
             'label'  => $langs->transnoentities('TmdLate'),
-            'url'    => $listUrl . '&search_done=0&search_date_due_dtendday=' . dol_print_date($yesterday, '%d') . '&search_date_due_dtendmonth=' . dol_print_date($yesterday, '%m') . '&search_date_due_dtendyear=' . dol_print_date($yesterday, '%Y'),
+            'url'    => $listUrl . '&search_done=0&search_status[]=' . Tmd::STATUS_PENDING . '&search_date_due_dtendday=' . dol_print_date($yesterday, '%d') . '&search_date_due_dtendmonth=' . dol_print_date($yesterday, '%m') . '&search_date_due_dtendyear=' . dol_print_date($yesterday, '%Y'),
             'icon'   => 'fas fa-exclamation-triangle',
             'active' => $lateActive,
         ];
-        foreach ([Tmd::STATUS_PENDING => ['TmdStatusPending', 'fas fa-hourglass-half'], Tmd::STATUS_DONE => ['TmdStatusDoneToInvoice', 'fas fa-check'], Tmd::STATUS_INVOICED => ['TmdStatusInvoiced', 'fas fa-file-invoice-dollar']] as $status => $preset) {
+        $statePresets = [
+            Tmd::STATUS_PENDING       => ['TmdStatusPending', 'fas fa-hourglass-half'],
+            Tmd::STATUS_SUBCONTRACTED => ['TmdStatusSubcontracted', 'fas fa-people-arrows'],
+            Tmd::STATUS_DONE          => ['TmdStatusDoneToInvoice', 'fas fa-check'],
+            Tmd::STATUS_INVOICED      => ['TmdStatusInvoiced', 'fas fa-file-invoice-dollar'],
+        ];
+        foreach ($statePresets as $status => $preset) {
             $presets[] = [
                 'label'  => $langs->transnoentities($preset[0]),
                 'url'    => $listUrl . '&search_status[]=' . $status,
@@ -315,7 +324,7 @@ class ActionsDolitmd
                 continue;
             }
             // Already in this state, ticks included
-            if ((int) $tmd->status === $state && (int) $tmd->done === ($state >= Tmd::STATUS_DONE ? 1 : 0) && (int) $tmd->invoiced === ($state == Tmd::STATUS_INVOICED ? 1 : 0)) {
+            if ($tmd->hasState($state)) {
                 continue;
             }
             if ($tmd->setState($user, $state) > 0) {

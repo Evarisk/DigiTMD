@@ -239,16 +239,19 @@ $object->fetch($id);
 $counts = $object->countByStatus();
 dolitmd_ajax_reply(200, [
     'counts'   => [
-        'late'     => $object->countLate(),
-        'pending'  => $counts[Tmd::STATUS_PENDING],
-        'done'     => $counts[Tmd::STATUS_DONE],
-        'invoiced' => $counts[Tmd::STATUS_INVOICED],
-        'total'    => array_sum($counts),
+        'late'          => $object->countLate(),
+        'pending'       => $counts[Tmd::STATUS_PENDING],
+        'subcontracted' => $counts[Tmd::STATUS_SUBCONTRACTED],
+        'done'          => $counts[Tmd::STATUS_DONE],
+        'invoiced'      => $counts[Tmd::STATUS_INVOICED],
+        'total'         => array_sum($counts),
     ],
     'success'  => true,
     'id'       => (int) $object->id,
     'done'     => (int) $object->done,
     'invoiced' => (int) $object->invoiced,
+    // The row of a subcontracted request is greyed
+    'code'     => (int) $object->status,
     'status'   => $object->getLibStatut(5),
     'state'    => dolitmd_state_html($object, true),
     'flags'    => [
