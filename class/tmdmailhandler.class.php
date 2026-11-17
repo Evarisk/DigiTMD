@@ -210,6 +210,8 @@ class TmdMailHandler
         }
 
         $tmd->label        = dol_trunc($subject, 255, 'right', 'UTF-8', 1);
+        // ADR, IATA or IMDG: named by the subject, else by the text of the mail
+        $tmd->category     = Tmd::categoryFromMail($subject, (string) $ticket->message);
         $tmd->fk_soc       = $socId > 0 ? $socId : null;
         $tmd->fk_socpeople = $contactId > 0 ? $contactId : null;
         $tmd->fk_ticket    = $ticket->id;
