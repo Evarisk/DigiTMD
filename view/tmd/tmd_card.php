@@ -74,6 +74,12 @@ $permissiontoadd    = $user->hasRight('dolitmd', 'tmd', 'write');
 $permissiontodelete = $user->hasRight('dolitmd', 'tmd', 'delete');
 saturne_check_access($permissiontoread, $object);
 
+// Still without nomeref ID, a document of the tab Documents with one in its name: taken at the display of the card,
+// when the trigger of the document did not (document added before this was done, or by another way than the tab)
+if ($object->id > 0 && $permissiontoadd && in_array($action, ['', 'view'], true)) {
+    $object->fillSoftwareRefFromDocuments($user);
+}
+
 /*
  * Actions
  */
