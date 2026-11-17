@@ -180,7 +180,10 @@ class ActionsDolitmd
         $selected   = GETPOST('search_status', 'array');
         $selected   = is_array($selected) ? array_values(array_map('intval', $selected)) : [];
         $lateActive = GETPOST('search_done', 'alpha') === '0' && GETPOSTISSET('search_date_due_dtendday');
-        $presets    = [['label' => $langs->transnoentities('TmdAll'), 'url' => $listUrl . '&button_removefilter=1', 'icon' => 'fas fa-list', 'active' => empty($selected) && !$lateActive]];
+        // The category chosen in the list (ADR only, say) stays through the quick filters, which are about the states
+        $category   = Tmd::normalizeCategory(GETPOST('search_category', 'alpha'));
+        $listUrl   .= $category !== null ? '&search_category=' . urlencode($category) : '';
+        $presets    = [['label' => $langs->transnoentities('TmdAll'), 'url' => $listUrl . ($category !== null ? '' : '&button_removefilter=1'), 'icon' => 'fas fa-list', 'active' => empty($selected) && !$lateActive]];
         // Late: not done, deadline yesterday at the latest (the filters of the list: follow-up and deadline)
         $yesterday  = dol_time_plus_duree(dol_now(), -1, 'd');
         $presets[]  = [
