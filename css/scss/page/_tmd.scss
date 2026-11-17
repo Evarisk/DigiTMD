@@ -491,3 +491,29 @@ body#mainbody .dolitmd-sender-create {
 .mod-tmd .fa-truck-moving {
   color: $dt-accent;
 }
+
+// Card: the mail of the customer then the messages of its ticket (timeline of the messages of a ticket)
+.dolitmd-request {
+  margin-top: 20px;
+
+  .timeline {
+    margin-bottom: 10px;
+  }
+
+  .timeline > li.timeline-code-dolitmd_request > .fa {
+    background: $dt-accent;
+    color: #fff;
+  }
+
+  // Answers quoting the whole thread: the text scrolls, the mail of the request is shown in full
+  .timeline > li:not(.timeline-code-dolitmd_request) > .timeline-item > .timeline-body {
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .dolitmd-request-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+  }
+}
