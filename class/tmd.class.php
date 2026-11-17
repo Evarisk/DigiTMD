@@ -509,6 +509,74 @@ class Tmd extends SaturneObject
     }
 
     /**
+     * What the ticket of the request holds, read on the card: the mail of the request, then the messages of the ticket
+     * (answers received, mails sent, notes), the oldest first. Each file of the ticket goes with the message saved
+     * just before it (the mail handler saves the attachments right after the message)
+     *
+     * @return array<int,array{code:string,title:string,date:int,message:string,files:array<int,array{name:string,size:int,path:string}>}> Empty without ticket
+     */
+    public function getRequestThread(): array
+    {
+        global $conf, $langs;
+
+        if (empty($this->fk_ticket) || !isModEnabled('ticket')) {
+            return [];
+        }
+        require_once DOL_DOCUMENT_ROOT . '/ticket/class/ticket.class.php';
+        require_once DOL_DOCUMENT_ROOT . '/core/lib/files.lib.php';
+
+        $ticket = new Ticket($this->db);
+        if ($ticket->fetch((int) $this->fk_ticket) <= 0) {
+            return [];
+        }
+
+        $sender  = (string) ($this->email_from ?: $ticket->origin_email);
+        $thread  = [['code' => 'dolitmd_request', 'title' => $sender !== '' ? $langs->trans('TmdRequestFrom', $sender) : $langs->trans('TmdRequestContent'), 'date' => (int) ($this->date_mail ?: $ticket->datec), 'message' => (string) $ticket->message, 'files' => []]];
+        $created = [(int) $ticket->datec];
+
+        // Label of a message: the subject of the ticket (cut after its first [...]), then who wrote it
+        $prefix = trim((string) preg_replace('/(\[[^\]]*\]).*$/', '\1', (string) $ticket->subject));
+        $sql    = 'SELECT a.id, a.code, a.label, a.note, a.datep, a.datec, a.fk_user_author FROM ' . $this->db->prefix() . 'actioncomm AS a';
+        $sql   .= " WHERE a.elementtype = 'ticket' AND a.fk_element = " . ((int) $ticket->id) . ' AND a.entity IN (' . getEntity('agenda') . ')';
+        $sql   .= " AND a.code IN ('TICKET_MSG', 'TICKET_MSG_SENTBYMAIL', 'TICKET_MSG_PRIVATE', 'TICKET_MSG_PRIVATE_SENTBYMAIL')";
+        $sql   .= ' ORDER BY a.datep ASC, a.id ASC';
+        $resql  = $this->db->query($sql);
+        $users  = [];
+        while ($resql && ($obj = $this->db->fetch_object($resql))) {
+            $title = trim((string) $obj->label);
+            if ($prefix !== '' && strpos($title, $prefix) === 0) {
+                $title = trim(substr($title, strlen($prefix)));
+            }
+            if ($title === '') {
+                $userId = (int) $obj->fk_user_author;
+                if (!isset($users[$userId])) {
+                    $author          = new User($this->db);
+                    $users[$userId] = $userId > 0 && $author->fetch($userId) > 0 ? $author->getFullName($langs) : '';
+                }
+                $title = $users[$userId] !== '' ? $langs->trans('TmdThreadMessageBy', $users[$userId]) : $langs->trans('Message');
+            }
+            $thread[]  = ['code' => strtolower((string) $obj->code), 'title' => $title, 'date' => (int) $this->db->jdate($obj->datep), 'message' => (string) $obj->note, 'files' => []];
+            $created[] = (int) $this->db->jdate($obj->datec);
+        }
+
+        $baseDir = $conf->ticket->multidir_output[$ticket->entity ?? $conf->entity] ?? $conf->ticket->dir_output;
+        foreach (dol_dir_list($baseDir . '/' . dol_sanitizeFileName($ticket->ref), 'files', 0, '', '(\.meta|_preview.*\.png)$', 'date', SORT_ASC, 1) as $file) {
+            if ($file['name'][0] === '.') {
+                continue;
+            }
+            $index = 0;
+            foreach ($created as $i => $date) {
+                if ($date <= (int) $file['date']) {
+                    $index = $i;
+                }
+            }
+            $thread[$index]['files'][] = ['name' => (string) $file['name'], 'size' => (int) $file['size'], 'path' => dol_sanitizeFileName($ticket->ref) . '/' . $file['name']];
+        }
+
+        return $thread;
+    }
+
+    /**
      * Under the banner of the tab Documents (saturne_document.php): its files are seen by the customer
      *
      * @param  int    $id Id of the request
