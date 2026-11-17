@@ -13,7 +13,8 @@
 -- You should have received a copy of the GNU General Public License
 -- along with this program.  If not, see https://www.gnu.org/licenses/.
 
--- Answers about a TMD request added to its ticket: one row per mail, so that a mail is never added twice
+-- Answers about a TMD request added to its ticket: one row per mail, so that a mail is never added twice. fk_tmd 0: a
+-- mail read and left out (an answer with the TMD mailbox in copy only), never taken again
 CREATE TABLE llx_dolitmd_tmd_reply(
 	rowid         integer AUTO_INCREMENT PRIMARY KEY NOT NULL,
 	entity        integer DEFAULT 1 NOT NULL,

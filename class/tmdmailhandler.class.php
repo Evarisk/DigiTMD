@@ -192,6 +192,11 @@ class TmdMailHandler
             $this->appendReply($parentId, $row, $message, $sender, $dateMail, $author, $mailbox);
             return 0;
         }
+        // An answer of a thread the mailbox only gets in copy (a consultant answering the customer): never a request
+        if ($this->isCopiedAnswer($row, $mailbox)) {
+            $this->leaveOut($row, $sender, $dateMail);
+            return 0;
+        }
 
         [$socId, $contactId]  = $this->findSender($sender);
         $subject              = trim((string) $row->subject) !== '' ? trim((string) $row->subject) : $langs->transnoentities('TmdMailNoSubject');
@@ -245,6 +250,52 @@ class TmdMailHandler
         }
 
         return is_object($this->db->getRow('SELECT rowid FROM ' . $this->db->prefix() . "dolitmd_tmd_reply WHERE message_id = '" . $this->db->escape($messageId) . "' AND entity IN (" . getEntity('tmd') . ')'));
+    }
+
+    /**
+     * An answer (In-Reply-To, or a subject in « RE: ») where the TMD mailbox is not among the recipients, in copy only:
+     * someone answering another person of a thread the mailbox never had as a request. A new mail with the mailbox in
+     * copy, or a forward (« TR: »), stays a request
+     *
+     * @param  object $row     Row of llx_inbox_mail
+     * @param  object $mailbox Mailbox (InboxAccount or its row)
+     * @return bool
+     */
+    protected function isCopiedAnswer(object $row, object $mailbox): bool
+    {
+        if (trim((string) $row->in_reply_to) === '' && !preg_match('/^\s*(re|aw|sv|antw)\s*:/i', (string) $row->subject)) {
+            return false;
+        }
+        $to = strtolower((string) $row->to_text);
+        foreach ($this->ownAddresses($mailbox) as $address) {
+            if (strpos($to, $address) !== false) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * A mail read and left out: kept in the answers with no request (fk_tmd 0), so that the scheduled job never takes it
+     * again (it would fill its 50 mails a run with the same ones)
+     *
+     * @param  object $row      Row of llx_inbox_mail
+     * @param  string $sender   Address of the sender
+     * @param  int    $dateMail Date of the mail
+     * @return void
+     */
+    protected function leaveOut(object $row, string $sender, int $dateMail): void
+    {
+        global $conf;
+
+        if (trim((string) $row->message_id) === '') {
+            return;
+        }
+        $sql  = 'INSERT INTO ' . $this->db->prefix() . 'dolitmd_tmd_reply (entity, fk_tmd, message_id, email_from, date_mail, date_creation) VALUES (' . ((int) $conf->entity) . ', 0, ';
+        $sql .= "'" . $this->db->escape((string) $row->message_id) . "', '" . $this->db->escape($sender) . "', '" . $this->db->idate($dateMail) . "', '" . $this->db->idate(dol_now()) . "')";
+        $this->db->query($sql);
+        dol_syslog(__METHOD__ . ' mail ' . $row->rowid . ' from ' . $sender . ' left out: an answer with the TMD mailbox in copy only', LOG_INFO);
     }
 
     /**
