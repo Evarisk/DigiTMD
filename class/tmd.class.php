@@ -109,6 +109,16 @@ class Tmd extends SaturneObject
     ];
 
     /**
+     * Words of the text of a mail naming each category: the ones of a subject, plus the plane and the ship. Never the
+     * road nor the truck: every transport has a road part, by air or by sea too
+     */
+    public const CATEGORY_BODY_PATTERNS = [
+        'ADR'  => '\bADR\b',
+        'IATA' => '\bIATA\b|\ba(?:é|e)rien(?:ne)?s?\b|\bavions?\b',
+        'IMDG' => '\bIMDG\b|\bmaritimes?\b|\bbateaux?\b|\bnavires?\b',
+    ];
+
+    /**
      * @var array Array with all fields and their property. Do not use it as a static var. It may be modified by constructor
      */
     public $fields = [
@@ -704,14 +714,15 @@ class Tmd extends SaturneObject
      * Category named by a text (the subject of the mail): ADR, IATA or IMDG, or the words air and sea in French. Several
      * named: the first one in the text
      *
-     * @param  string $text Text read
-     * @return string       Category, empty when the text names none
+     * @param  string               $text     Text read
+     * @param  array<string,string> $patterns Words of each category (self::CATEGORY_PATTERNS, CATEGORY_BODY_PATTERNS)
+     * @return string                         Category, empty when the text names none
      */
-    public static function categoryFromText(string $text): string
+    public static function categoryFromText(string $text, array $patterns = self::CATEGORY_PATTERNS): string
     {
         $category = '';
         $first    = PHP_INT_MAX;
-        foreach (self::CATEGORY_PATTERNS as $key => $pattern) {
+        foreach ($patterns as $key => $pattern) {
             if (preg_match('/' . $pattern . '/iu', $text, $matches, PREG_OFFSET_CAPTURE) && $matches[0][1] < $first) {
                 $first    = $matches[0][1];
                 $category = $key;
@@ -722,17 +733,66 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * Requests without category: the one their subject names (requests made before the categories, at the activation
-     * of the module). Never a trigger: nothing else than the category changes
+     * Category named by a mail: its subject first, else its text (the words of the sender, not the mails it answers:
+     * a new request written as an answer to the previous one would take its category). A forwarded mail: the mail
+     * forwarded too, the request is there
+     *
+     * @param  string $subject Subject of the mail
+     * @param  string $body    Text of the mail
+     * @return string          Category, empty when the mail names none
+     */
+    public static function categoryFromMail(string $subject, string $body): string
+    {
+        $category = self::categoryFromText($subject);
+        if ($category !== '' || trim($body) === '') {
+            return $category;
+        }
+        [$own, $quoted] = self::splitQuotedText($body);
+        $category       = self::categoryFromText($own, self::CATEGORY_BODY_PATTERNS);
+        if ($category === '' && $quoted !== '' && preg_match('/^\s*(?:TR|FW|FWD|WG)\s*:/i', $subject)) {
+            $category = self::categoryFromText($quoted, self::CATEGORY_BODY_PATTERNS);
+        }
+
+        return $category;
+    }
+
+    /**
+     * Text of a mail cut in two: the words of the sender, then from its signature (« -- ») or the first mail quoted
+     * (lines « > », « De : … Envoyé : … » of Outlook, « Le … a écrit : », « ----- Message d'origine ----- », line of
+     * underscores)
+     *
+     * @param  string   $text Text of the mail
+     * @return string[]       [words of the sender, the rest]
+     */
+    public static function splitQuotedText(string $text): array
+    {
+        $text    = str_replace(["\r\n", "\r"], "\n", $text);
+        $pattern = '/^[ \t]*(?:>|--[ \t]*$|-{2,}[ \t]*(?:Original Message|Message d.origine|Forwarded message|Message transf)'
+            . '|_{10,}[ \t]*$|(?:De|From)[ \t]*:[^\n]*\n(?:[^\n]*\n){0,3}?[ \t]*(?:Envoy|Sent|Date)[^\n:]{0,4}:'
+            . '|(?:Le|On)[ \t][^\n]{5,250}(?:\n[^\n]{0,120})?(?:a [ée]crit|wrote)[ \t]*:)/imu';
+        if (preg_match($pattern, $text, $matches, PREG_OFFSET_CAPTURE)) {
+            return [substr($text, 0, $matches[0][1]), substr($text, $matches[0][1])];
+        }
+
+        return [$text, ''];
+    }
+
+    /**
+     * Requests without category: the one their mail names, subject then text (requests made before the categories, at
+     * the activation of the module). Never a trigger: nothing else than the category changes
      *
      * @return int Requests given a category
      */
     public function fillMissingCategories(): int
     {
-        $rows   = $this->db->getRows('SELECT rowid, label FROM ' . $this->db->prefix() . $this->table_element . " WHERE (category IS NULL OR category = '') AND label IS NOT NULL LIMIT 100000");
+        $p      = $this->db->prefix();
+        $ticket = isModEnabled('ticket');
+        $rows   = $this->db->getRows('SELECT t.rowid, t.label' . ($ticket ? ', tk.message' : '') . ' FROM ' . $p . $this->table_element . ' AS t'
+            . ($ticket ? ' LEFT JOIN ' . $p . 'ticket AS tk ON tk.rowid = t.fk_ticket' : '')
+            . " WHERE (t.category IS NULL OR t.category = '') AND t.label IS NOT NULL LIMIT 100000");
         $filled = 0;
         foreach (is_array($rows) ? $rows : [] as $row) {
-            $category = self::categoryFromText((string) $row->label);
+            $category = self::categoryFromMail((string) $row->label, (string) ($row->message ?? ''));
             if ($category !== '' && $this->db->query('UPDATE ' . $this->db->prefix() . $this->table_element . " SET category = '" . $this->db->escape($category) . "' WHERE rowid = " . ((int) $row->rowid))) {
                 $filled++;
             }
