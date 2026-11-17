@@ -119,6 +119,11 @@ class Tmd extends SaturneObject
     ];
 
     /**
+     * Picto of a request by its category: the truck (road, and no category: the picto of the module), the plane, the ship
+     */
+    public const CATEGORY_PICTOS = ['ADR' => 'fa-truck-moving', 'IATA' => 'fa-plane', 'IMDG' => 'fa-ship'];
+
+    /**
      * @var array Array with all fields and their property. Do not use it as a static var. It may be modified by constructor
      */
     public $fields = [
@@ -321,6 +326,30 @@ class Tmd extends SaturneObject
         }
 
         parent::__construct($db, $this->module, $this->element);
+    }
+
+    /**
+     * Load the values of a row (fetch, each row of the list): the picto follows the category of the request (banner,
+     * link, tooltip)
+     *
+     * @param  object $obj Row of the database
+     * @return void
+     */
+    public function setVarsFromFetchObj(&$obj)
+    {
+        parent::setVarsFromFetchObj($obj);
+        $this->picto = self::categoryPicto($this->category);
+    }
+
+    /**
+     * Picto of a category: the truck for the road and for no category, the plane for the air, the ship for the sea
+     *
+     * @param  mixed  $category Category of the request
+     * @return string           Picto (fontawesome_…), the color of the module
+     */
+    public static function categoryPicto($category): string
+    {
+        return 'fontawesome_' . (self::CATEGORY_PICTOS[self::normalizeCategory($category) ?? 'ADR']) . '_fas_#E67E22';
     }
 
     /**

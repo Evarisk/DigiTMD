@@ -54,6 +54,26 @@ window.dolitmd.tmd.markRows = function(rows) {
 };
 
 /**
+ * Picto of a request by its category (Tmd::CATEGORY_PICTOS): the truck for the road and for no category
+ *
+ * @type {Object<string, string>}
+ */
+window.dolitmd.tmd.categoryPictos = {ADR: 'fa-truck-moving', IATA: 'fa-plane', IMDG: 'fa-ship'};
+
+/**
+ * Category chosen in the list (select of Saturne, saved by it): the picto of the request follows at once
+ *
+ * @returns {void}
+ */
+window.dolitmd.tmd.showCategoryPicto = function() {
+  const pictos = window.dolitmd.tmd.categoryPictos;
+  const picto  = pictos[$(this).val()] || pictos.ADR;
+  $(this).closest('tr').find('a[href*="tmd_card.php"] .fas').filter('.' + Object.values(pictos).join(', .')).each(function() {
+    $(this).removeClass(Object.values(pictos).join(' ')).addClass(picto);
+  });
+};
+
+/**
  * Tmd events
  *
  * @returns {void}
@@ -61,6 +81,7 @@ window.dolitmd.tmd.markRows = function(rows) {
 window.dolitmd.tmd.event = function() {
   $(document).on('change', '.dolitmd-flag-input', window.dolitmd.tmd.saveFlag);
   $(document).on('change', '.dolitmd-state', window.dolitmd.tmd.saveState);
+  $(document).on('change', '.saturne-inline-select[data-field="category"]', window.dolitmd.tmd.showCategoryPicto);
   $(document).on('click', '.dolitmd-sender-create', window.dolitmd.tmd.openThirdpartyModal);
   $(document).on('submit', '.dolitmd-soc-form', window.dolitmd.tmd.createThirdparty);
   $(document).on('click', '.dolitmd-soc-link', window.dolitmd.tmd.linkThirdparty);
