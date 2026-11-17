@@ -24,6 +24,7 @@ CREATE TABLE llx_dolitmd_tmd(
 	import_key       varchar(14),
 	status           smallint DEFAULT 0 NOT NULL,
 	label            varchar(255),
+	category         varchar(8),
 	software_ref     varchar(128),
 	fk_soc           integer,
 	fk_socpeople     integer,

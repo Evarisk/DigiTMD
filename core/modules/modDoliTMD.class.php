@@ -272,9 +272,21 @@ class modDoliTMD extends DolibarrModules
             return -1;
         }
 
+        $resql       = $this->db->DDLDescTable($this->db->prefix() . 'dolitmd_tmd', 'category');
+        $hadCategory = $resql && $this->db->num_rows($resql) > 0;
+
         $result = $this->_load_tables('/dolitmd/sql/');
         if ($result < 0) {
             return -1;
+        }
+
+        // The requests made before their category: the one their subject names
+        dol_include_once('/dolitmd/class/tmd.class.php');
+        (new Tmd($this->db))->fillMissingCategories();
+        // The column of the category, the day it comes: shown to the users who chose the columns of the list (a column
+        // they did not choose stays hidden), once only, they may hide it afterwards
+        if (!$hadCategory) {
+            $this->db->query('UPDATE ' . $this->db->prefix() . "user_param SET value = CONCAT('t.category,', value) WHERE param = 'MAIN_SELECTEDFIELDS_tmdlist_saturne' AND value NOT LIKE '%t.category%'");
         }
 
         dolibarr_set_const($this->db, 'DOLITMD_VERSION', $this->version, 'chaine', 0, '', $conf->entity);

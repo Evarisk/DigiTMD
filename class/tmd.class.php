@@ -93,6 +93,20 @@ class Tmd extends SaturneObject
     public const STATE_LABELS = [self::STATUS_PENDING => 'TmdStatusPending', self::STATUS_DONE => 'TmdStatusDone', self::STATUS_INVOICED => 'TmdStatusInvoiced'];
 
     /**
+     * Categories of a request: the regulation of the transport, road, air or sea
+     */
+    public const CATEGORIES = ['ADR', 'IATA', 'IMDG'];
+
+    /**
+     * Words of a subject naming each category
+     */
+    public const CATEGORY_PATTERNS = [
+        'ADR'  => '\bADR\b',
+        'IATA' => '\bIATA\b|\ba(?:é|e)rien(?:ne)?s?\b',
+        'IMDG' => '\bIMDG\b|\bmaritimes?\b',
+    ];
+
+    /**
      * @var array Array with all fields and their property. Do not use it as a static var. It may be modified by constructor
      */
     public $fields = [
@@ -101,7 +115,9 @@ class Tmd extends SaturneObject
         'ref_ext'          => ['type' => 'varchar(128)', 'label' => 'RefExt',           'enabled' => 1, 'position' => 20,  'notnull' => 0, 'visible' => 0],
         'entity'           => ['type' => 'integer',      'label' => 'Entity',           'enabled' => 1, 'position' => 30,  'notnull' => 1, 'visible' => 0, 'index' => 1],
         // In the list: the request, its thirdparty, its state and ticks, the nomeref ID, then the mail
-        'date_mail'        => ['type' => 'datetime',     'label' => 'TmdDateMail',      'enabled' => 1, 'position' => 40,  'notnull' => 0, 'visible' => 1, 'noedit' => 1, 'csslist' => 'nowraponall'],
+        // The empty key: the inline select of the list offers « none » (the filter of the list leaves it out)
+        'category'         => ['type' => 'varchar(8)',   'label' => 'TmdCategory',      'enabled' => 1, 'position' => 35,  'notnull' => 0, 'visible' => 1, 'index' => 1, 'arrayofkeyval' => ['' => '', 'ADR' => 'ADR', 'IATA' => 'IATA', 'IMDG' => 'IMDG'], 'csslist' => 'center nowraponall', 'help' => 'TmdCategoryHelp'],
+        'date_mail'        => ['type' => 'datetime',     'label' => 'TmdDateMail',     'enabled' => 1, 'position' => 40,  'notnull' => 0, 'visible' => 1, 'noedit' => 1, 'csslist' => 'nowraponall'],
         'date_due'         => ['type' => 'date',         'label' => 'TmdDateDue',       'enabled' => 1, 'position' => 45,  'notnull' => 0, 'visible' => 1, 'index' => 1, 'csslist' => 'nowraponall', 'help' => 'TmdDateDueHelp'],
         'fk_soc'           => ['type' => 'integer:Societe:societe/class/societe.class.php:1', 'label' => 'ThirdParty', 'picto' => 'company', 'enabled' => 'isModEnabled("societe")', 'position' => 50, 'notnull' => 0, 'visible' => 1, 'index' => 1, 'css' => 'maxwidth500 widthcentpercentminusxx', 'csslist' => 'tdoverflowmax150'],
         'fk_socpeople'     => ['type' => 'integer:Contact:contact/class/contact.class.php:1', 'label' => 'Contact', 'picto' => 'contact', 'enabled' => 'isModEnabled("societe")', 'position' => 55, 'notnull' => 0, 'visible' => -1, 'css' => 'maxwidth500 widthcentpercentminusxx', 'csslist' => 'tdoverflowmax150'],
@@ -173,6 +189,11 @@ class Tmd extends SaturneObject
      * @var string|null Subject of the mail
      */
     public $label;
+
+    /**
+     * @var string|null Category: ADR, IATA or IMDG (self::CATEGORIES), null when not known
+     */
+    public $category;
 
     /**
      * @var string|null Identifier of the request in nomeref (ID nomeref)
@@ -309,6 +330,8 @@ class Tmd extends SaturneObject
         if (empty($this->track_id)) {
             $this->track_id = self::generateTrackId();
         }
+        // Not chosen: the one the subject names (mail received, form left empty, API)
+        $this->category = self::normalizeCategory($this->category) ?? self::normalizeCategory(self::categoryFromText((string) $this->label));
 
         // Deadline: the date of the mail (or today) plus the delay of the setup, 0 = no deadline
         $delay = getDolGlobalInt('DOLITMD_DELAY_DAYS', 15);
@@ -520,6 +543,8 @@ class Tmd extends SaturneObject
             $before = $this->db->getRow('SELECT done, invoiced FROM ' . $this->db->prefix() . $this->table_element . ' WHERE rowid = ' . ((int) $this->id));
         }
         $this->stampFlags($user, is_object($before) ? $before : null);
+        // The empty choice of the select of the card is « 0 »
+        $this->category = self::normalizeCategory($this->category);
 
         $result = parent::update($user, $noTrigger);
         // Done now, or pending again: the ticket follows (closed as solved, opened again). Never a mail: the mail
@@ -590,6 +615,60 @@ class Tmd extends SaturneObject
         }
 
         return $result;
+    }
+
+    /**
+     * A category of self::CATEGORIES, whatever its case, else null (empty, « 0 » of the select of the card, unknown)
+     *
+     * @param  mixed       $value Value given
+     * @return string|null        ADR, IATA, IMDG or null
+     */
+    public static function normalizeCategory($value): ?string
+    {
+        $value = strtoupper(trim((string) $value));
+
+        return in_array($value, self::CATEGORIES, true) ? $value : null;
+    }
+
+    /**
+     * Category named by a text (the subject of the mail): ADR, IATA or IMDG, or the words air and sea in French. Several
+     * named: the first one in the text
+     *
+     * @param  string $text Text read
+     * @return string       Category, empty when the text names none
+     */
+    public static function categoryFromText(string $text): string
+    {
+        $category = '';
+        $first    = PHP_INT_MAX;
+        foreach (self::CATEGORY_PATTERNS as $key => $pattern) {
+            if (preg_match('/' . $pattern . '/iu', $text, $matches, PREG_OFFSET_CAPTURE) && $matches[0][1] < $first) {
+                $first    = $matches[0][1];
+                $category = $key;
+            }
+        }
+
+        return $category;
+    }
+
+    /**
+     * Requests without category: the one their subject names (requests made before the categories, at the activation
+     * of the module). Never a trigger: nothing else than the category changes
+     *
+     * @return int Requests given a category
+     */
+    public function fillMissingCategories(): int
+    {
+        $rows   = $this->db->getRows('SELECT rowid, label FROM ' . $this->db->prefix() . $this->table_element . " WHERE (category IS NULL OR category = '') AND label IS NOT NULL LIMIT 100000");
+        $filled = 0;
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            $category = self::categoryFromText((string) $row->label);
+            if ($category !== '' && $this->db->query('UPDATE ' . $this->db->prefix() . $this->table_element . " SET category = '" . $this->db->escape($category) . "' WHERE rowid = " . ((int) $row->rowid))) {
+                $filled++;
+            }
+        }
+
+        return $filled;
     }
 
     /**

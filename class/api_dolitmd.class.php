@@ -37,7 +37,7 @@ class Dolitmd extends DolibarrApi
     /**
      * Fields a request takes from the API (the others are computed or technical)
      */
-    public const WRITABLE_FIELDS = ['label', 'ref_ext', 'date_mail', 'date_due', 'fk_soc', 'fk_socpeople', 'software_ref', 'email_from', 'fk_ticket'];
+    public const WRITABLE_FIELDS = ['label', 'category', 'ref_ext', 'date_mail', 'date_due', 'fk_soc', 'fk_socpeople', 'software_ref', 'email_from', 'fk_ticket'];
 
     /**
      * States of a request by their name
@@ -113,13 +113,14 @@ class Dolitmd extends DolibarrApi
      * @param  int    $thirdparty Only the requests of this thirdparty (ID)
      * @param  string $sqlfilters Other criteria. Example: "(t.email_from:like:'%@staci.com')"
      * @param  string $properties Properties to return, separated by commas. Empty = all
+     * @param  string $category   Only the requests of this category: ADR, IATA or IMDG
      * @return array              List of requests
      *
      * @throws RestException 400 Bad request
      * @throws RestException 403 Forbidden
      * @throws RestException 503 Query error
      */
-    public function index(string $sortfield = 't.date_mail', string $sortorder = 'DESC', int $limit = 100, int $page = 0, string $state = '', int $thirdparty = 0, string $sqlfilters = '', string $properties = ''): array
+    public function index(string $sortfield = 't.date_mail', string $sortorder = 'DESC', int $limit = 100, int $page = 0, string $state = '', int $thirdparty = 0, string $sqlfilters = '', string $properties = '', string $category = ''): array
     {
         $this->checkRight('read');
 
@@ -136,6 +137,12 @@ class Dolitmd extends DolibarrApi
         }
         if ($thirdparty > 0) {
             $sql .= ' AND t.fk_soc = ' . ((int) $thirdparty);
+        }
+        if ($category !== '') {
+            if (Tmd::normalizeCategory($category) === null) {
+                throw new RestException(400, 'Bad category ' . $category . ': ' . implode(', ', Tmd::CATEGORIES));
+            }
+            $sql .= " AND t.category = '" . $this->db->escape(Tmd::normalizeCategory($category)) . "'";
         }
         // An external user sees the requests of his thirdparty only
         if (!empty(DolibarrApiAccess::$user->socid)) {
@@ -172,8 +179,9 @@ class Dolitmd extends DolibarrApi
      * Create a TMD request
      *
      * The reference, the tracking number and the deadline (date of the mail plus the delay of the setup) are given by
-     * DoliTMD. Fields: label (mandatory), ref_ext, date_mail, date_due, fk_soc, fk_socpeople, software_ref (nomeref
-     * ID), email_from, fk_ticket. Dates as a timestamp or « YYYY-MM-DD HH:MM:SS ».
+     * DoliTMD. Fields: label (mandatory), category (ADR, IATA or IMDG; not given: the one the label names), ref_ext,
+     * date_mail, date_due, fk_soc, fk_socpeople, software_ref (nomeref ID), email_from, fk_ticket. Dates as a timestamp
+     * or « YYYY-MM-DD HH:MM:SS ».
      *
      * Example: { "label": "DEMANDE ADR X1650956 ROUMANIE", "fk_soc": 12, "email_from": "client@example.com" }
      *
@@ -462,6 +470,13 @@ class Dolitmd extends DolibarrApi
             }
             if ($field === 'email_from' && $value !== null && $value !== '' && !isValidEmail((string) $value)) {
                 throw new RestException(400, 'Bad address for email_from');
+            }
+            if ($field === 'category') {
+                if ($value !== null && $value !== '' && Tmd::normalizeCategory($value) === null) {
+                    throw new RestException(400, 'Bad category ' . $value . ': ' . implode(', ', Tmd::CATEGORIES));
+                }
+                $tmd->category = Tmd::normalizeCategory($value);
+                continue;
             }
             $tmd->$field = $this->_checkValForAPI($field, $value, $tmd);
         }
