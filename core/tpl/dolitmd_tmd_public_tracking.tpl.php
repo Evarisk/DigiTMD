@@ -94,7 +94,8 @@ $size = static function (int $bytes) use ($langs): string {
         // Screen « request »: its state, its steps, its documents
         $state   = (int) $object->status;
         $isDone  = !empty($object->done);
-        $stateKeys = [Tmd::STATUS_PENDING => 'pending', Tmd::STATUS_DONE => 'done', Tmd::STATUS_INVOICED => 'invoiced'];
+        // Subcontracted: an internal matter, the customer sees its request being processed
+        $stateKeys = [Tmd::STATUS_PENDING => 'pending', Tmd::STATUS_SUBCONTRACTED => 'pending', Tmd::STATUS_DONE => 'done', Tmd::STATUS_INVOICED => 'invoiced'];
         $stateKey  = $stateKeys[$state] ?? 'pending';
 
         // The deadline is told while it is ahead only
