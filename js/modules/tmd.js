@@ -36,6 +36,21 @@ window.dolitmd.tmd = {};
  */
 window.dolitmd.tmd.init = function() {
   window.dolitmd.tmd.event();
+  window.dolitmd.tmd.markRows($('[data-dolitmd-state]').closest('tr[data-rowid]'));
+};
+
+/**
+ * Rows of the list greyed while their request is subcontracted: its state is given by the column « State » or
+ * « Follow-up » (either may be hidden)
+ *
+ * @param   {jQuery} rows Rows of the list (tr[data-rowid])
+ * @returns {void}
+ */
+window.dolitmd.tmd.markRows = function(rows) {
+  rows.each(function() {
+    const row = $(this);
+    row.toggleClass('dolitmd-row--subcontracted', String(row.find('[data-dolitmd-state]').first().attr('data-dolitmd-state')) === '3');
+  });
 };
 
 /**
@@ -159,7 +174,9 @@ window.dolitmd.tmd.refresh = function(answer) {
   var flags = $('.dolitmd-flag-input[data-id="' + answer.id + '"][data-field="invoiced"]').closest('.dolitmd-flags');
   flags.find('.dolitmd-invoice-link').remove();
   flags.append(answer.invoice || '');
+  flags.attr('data-dolitmd-state', answer.code);
   $('tr[data-rowid="' + answer.id + '"] td[data-colkey="status"]').html(answer.state);
+  window.dolitmd.tmd.markRows($('tr[data-rowid="' + answer.id + '"]'));
   // Deadline: a request done is late no more
   $('tr[data-rowid="' + answer.id + '"] td[data-colkey="date_due"]').html(answer.due || '');
   $.each(answer.counts || {}, function(state, count) {

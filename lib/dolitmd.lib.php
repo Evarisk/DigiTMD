@@ -109,7 +109,8 @@ function dolitmd_flag_html(Tmd $object, string $field, bool $canWrite): string
 }
 
 /**
- * Done and invoiced side by side: the column « Follow-up » of the list, then the invoice of an invoiced request
+ * Done and invoiced side by side: the column « Follow-up » of the list, then the invoice of an invoiced request. Its
+ * state too, for js/modules/tmd.js (row of a subcontracted request greyed, column « State » hidden or not)
  *
  * @param  Tmd    $object   TMD request
  * @param  bool   $canWrite The user may change them
@@ -117,7 +118,7 @@ function dolitmd_flag_html(Tmd $object, string $field, bool $canWrite): string
  */
 function dolitmd_flags_html(Tmd $object, bool $canWrite): string
 {
-    return '<span class="dolitmd-flags">' . dolitmd_flag_html($object, 'done', $canWrite) . dolitmd_flag_html($object, 'invoiced', $canWrite)
+    return '<span class="dolitmd-flags" data-dolitmd-state="' . ((int) $object->status) . '">' . dolitmd_flag_html($object, 'done', $canWrite) . dolitmd_flag_html($object, 'invoiced', $canWrite)
         . dolitmd_invoice_html($object) . '</span>';
 }
 
@@ -147,7 +148,8 @@ function dolitmd_invoice_html(Tmd $object): string
 }
 
 /**
- * Deadline of a TMD request in the list: red « Late » when passed and not done, orange within two days
+ * Deadline of a TMD request in the list: red « Late » when passed and not done, orange within two days (neither for a
+ * subcontracted request, never late)
  *
  * @param  Tmd    $object TMD request
  * @return string         HTML of the deadline
@@ -165,6 +167,9 @@ function dolitmd_due_html(Tmd $object): string
 
     if (!empty($object->done)) {
         return '<span class="dolitmd-due dolitmd-due--done">' . $date . '</span>';
+    }
+    if ((int) $object->status === Tmd::STATUS_SUBCONTRACTED) {
+        return '<span class="dolitmd-due">' . $date . '</span>';
     }
     if ($due < $today) {
         $days = (int) floor(($today - $due) / 86400) + 1;
@@ -186,9 +191,10 @@ function dolitmd_due_html(Tmd $object): string
 function dolitmd_mass_states(): array
 {
     return [
-        'tmdinvoiced' => ['state' => Tmd::STATUS_INVOICED, 'label' => 'TmdMassToInvoiced', 'stateLabel' => 'TmdStatusInvoiced', 'icon' => 'fa-file-invoice-dollar'],
-        'tmddone'     => ['state' => Tmd::STATUS_DONE, 'label' => 'TmdMassToDone', 'stateLabel' => 'TmdStatusDone', 'icon' => 'fa-check-circle'],
-        'tmdpending'  => ['state' => Tmd::STATUS_PENDING, 'label' => 'TmdMassToPending', 'stateLabel' => 'TmdStatusPending', 'icon' => 'fa-hourglass-half'],
+        'tmdinvoiced'      => ['state' => Tmd::STATUS_INVOICED, 'label' => 'TmdMassToInvoiced', 'stateLabel' => 'TmdStatusInvoiced', 'icon' => 'fa-file-invoice-dollar'],
+        'tmddone'          => ['state' => Tmd::STATUS_DONE, 'label' => 'TmdMassToDone', 'stateLabel' => 'TmdStatusDone', 'icon' => 'fa-check-circle'],
+        'tmdsubcontracted' => ['state' => Tmd::STATUS_SUBCONTRACTED, 'label' => 'TmdMassToSubcontracted', 'stateLabel' => 'TmdStatusSubcontracted', 'icon' => 'fa-people-arrows'],
+        'tmdpending'       => ['state' => Tmd::STATUS_PENDING, 'label' => 'TmdMassToPending', 'stateLabel' => 'TmdStatusPending', 'icon' => 'fa-hourglass-half'],
     ];
 }
 
@@ -204,17 +210,16 @@ function dolitmd_state_html(Tmd $object, bool $canWrite): string
 {
     global $langs;
 
+    $state = (int) $object->status;
+    // The state, read by js/modules/tmd.js: row of a subcontracted request greyed
     if (!$canWrite) {
-        return $object->getLibStatut(5);
+        return '<span class="dolitmd-state-badge" data-dolitmd-state="' . $state . '">' . $object->getLibStatut(5) . '</span>';
     }
 
-    $state  = (int) $object->status;
-    $labels = [Tmd::STATUS_PENDING => 'TmdStatusPending', Tmd::STATUS_DONE => 'TmdStatusDone', Tmd::STATUS_INVOICED => 'TmdStatusInvoiced'];
-
-    $out  = '<select class="dolitmd-state dolitmd-state--' . $state . '" data-id="' . ((int) $object->id) . '"';
+    $out  = '<select class="dolitmd-state dolitmd-state--' . $state . '" data-id="' . ((int) $object->id) . '" data-dolitmd-state="' . $state . '"';
     $out .= ' data-url="' . dol_escape_htmltag(dol_buildpath('/dolitmd/ajax/tmd.php', 1)) . '" data-error="' . dol_escape_htmltag($langs->transnoentities('TmdFlagError')) . '"';
     $out .= ' aria-label="' . dol_escape_htmltag($langs->transnoentities('TmdState')) . '" title="' . dol_escape_htmltag($langs->transnoentities('TmdStateChangeHelp')) . '">';
-    foreach ($labels as $key => $label) {
+    foreach (Tmd::STATE_LABELS as $key => $label) {
         $out .= '<option value="' . $key . '"' . ($key === $state ? ' selected' : '') . '>' . dol_escape_htmltag($langs->transnoentities($label)) . '</option>';
     }
     $out .= '</select>';

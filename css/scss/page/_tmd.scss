@@ -3,6 +3,11 @@
 
 $dt-accent: #E67E22;
 
+// State « Subcontracted »: violet (select, badge and card), none of the colours of the badges of Dolibarr
+$dt-subcontracted: #6d28d9;
+$dt-subcontracted-soft: #ede9fe;
+$dt-subcontracted-border: rgba(124, 58, 237, .3);
+
 // Banner: cards of the states, then the quick filters
 .dolitmd-list-banner {
   display: flex;
@@ -168,6 +173,13 @@ body#mainbody .div-table-responsive select.dolitmd-state {
     color: var(--saturne-text-soft, #475569) !important;
   }
 
+  // Subcontracted: violet, as its badge
+  &.dolitmd-state--3 {
+    background-color: $dt-subcontracted-soft !important;
+    border: 1px solid $dt-subcontracted-border !important;
+    color: $dt-subcontracted !important;
+  }
+
   &.dolitmd-state--saving {
     opacity: .55;
     cursor: progress;
@@ -190,6 +202,35 @@ body#mainbody .saturne-kpi-card.saturne-kpi-card-red {
   .saturne-kpi-card-value {
     color: var(--saturne-danger, #dc2626);
   }
+}
+
+// Card « Subcontracted » above the list: violet (neither Saturne nor the theme has such a card)
+body#mainbody .saturne-kpi-card.saturne-kpi-card-purple .saturne-kpi-card-icon {
+  background: $dt-subcontracted-soft;
+  color: $dt-subcontracted;
+}
+
+// Badge « Subcontracted » (card, list for those who may not change it): violet, over the grey of badge-status5
+body#mainbody .badge.badge-status5.dolitmd-badge-subcontracted {
+  background: $dt-subcontracted-soft !important;
+  border: 1px solid $dt-subcontracted-border !important;
+  color: $dt-subcontracted !important;
+
+  &.badge-dot.badge-dot {
+    border: none !important;
+    background: $dt-subcontracted !important;
+  }
+}
+
+// Row of a subcontracted request in the list (class set by js/modules/tmd.js): greyed, its state left in colour to
+// tell why, a bit clearer under the mouse
+body#mainbody tr.dolitmd-row--subcontracted > td:not([data-colkey="status"]) {
+  opacity: .45;
+  filter: grayscale(1);
+}
+
+body#mainbody tr.dolitmd-row--subcontracted:hover > td:not([data-colkey="status"]) {
+  opacity: .75;
 }
 
 // Deadline in the list: red badge when late, orange when near, faint when done

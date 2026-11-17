@@ -80,17 +80,19 @@ class Tmd extends SaturneObject
     public const TRACK_ID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
     /**
-     * The state is given by the two ticks: invoiced wins over done
+     * The state is given by the two ticks: invoiced wins over done. Neither ticked: pending, or subcontracted when chosen
+     * so (the request is handled by a subcontractor: greyed in the list, never late)
      */
-    public const STATUS_DELETED  = -1;
-    public const STATUS_PENDING  = 0;
-    public const STATUS_DONE     = 1;
-    public const STATUS_INVOICED = 2;
+    public const STATUS_DELETED       = -1;
+    public const STATUS_PENDING       = 0;
+    public const STATUS_DONE          = 1;
+    public const STATUS_INVOICED      = 2;
+    public const STATUS_SUBCONTRACTED = 3;
 
     /**
-     * Translation keys of the states
+     * Translation keys of the states, in the order of the choices
      */
-    public const STATE_LABELS = [self::STATUS_PENDING => 'TmdStatusPending', self::STATUS_DONE => 'TmdStatusDone', self::STATUS_INVOICED => 'TmdStatusInvoiced'];
+    public const STATE_LABELS = [self::STATUS_PENDING => 'TmdStatusPending', self::STATUS_SUBCONTRACTED => 'TmdStatusSubcontracted', self::STATUS_DONE => 'TmdStatusDone', self::STATUS_INVOICED => 'TmdStatusInvoiced'];
 
     /**
      * Categories of a request: the regulation of the transport, road, air or sea
@@ -121,7 +123,7 @@ class Tmd extends SaturneObject
         'date_due'         => ['type' => 'date',         'label' => 'TmdDateDue',       'enabled' => 1, 'position' => 45,  'notnull' => 0, 'visible' => 1, 'index' => 1, 'csslist' => 'nowraponall', 'help' => 'TmdDateDueHelp'],
         'fk_soc'           => ['type' => 'integer:Societe:societe/class/societe.class.php:1', 'label' => 'ThirdParty', 'picto' => 'company', 'enabled' => 'isModEnabled("societe")', 'position' => 50, 'notnull' => 0, 'visible' => 1, 'index' => 1, 'css' => 'maxwidth500 widthcentpercentminusxx', 'csslist' => 'tdoverflowmax150'],
         'fk_socpeople'     => ['type' => 'integer:Contact:contact/class/contact.class.php:1', 'label' => 'Contact', 'picto' => 'contact', 'enabled' => 'isModEnabled("societe")', 'position' => 55, 'notnull' => 0, 'visible' => -1, 'css' => 'maxwidth500 widthcentpercentminusxx', 'csslist' => 'tdoverflowmax150'],
-        'status'           => ['type' => 'smallint',     'label' => 'TmdState',         'enabled' => 1, 'position' => 60,  'notnull' => 1, 'visible' => 5, 'default' => 0, 'index' => 1, 'arrayofkeyval' => [0 => 'TmdStatusPending', 1 => 'TmdStatusDone', 2 => 'TmdStatusInvoiced'], 'searchmulti' => 1, 'csslist' => 'center nowraponall', 'help' => 'TmdStateHelp'],
+        'status'           => ['type' => 'smallint',     'label' => 'TmdState',         'enabled' => 1, 'position' => 60,  'notnull' => 1, 'visible' => 5, 'default' => 0, 'index' => 1, 'arrayofkeyval' => [0 => 'TmdStatusPending', 3 => 'TmdStatusSubcontracted', 1 => 'TmdStatusDone', 2 => 'TmdStatusInvoiced'], 'searchmulti' => 1, 'csslist' => 'center nowraponall', 'help' => 'TmdStateHelp'],
         // Done and invoiced: one column « Follow-up » in the list (two pictos, the column of done), each one on the card
         'done'             => ['type' => 'smallint',     'label' => 'TmdDone',          'enabled' => 1, 'position' => 65,  'notnull' => 1, 'visible' => 1, 'default' => 0, 'arrayofkeyval' => [0 => 'No', 1 => 'Yes'], 'csslist' => 'center nowraponall'],
         'invoiced'         => ['type' => 'smallint',     'label' => 'TmdInvoiced',      'enabled' => 1, 'position' => 70,  'notnull' => 1, 'visible' => 3, 'default' => 0, 'arrayofkeyval' => [0 => 'No', 1 => 'Yes'], 'help' => 'TmdInvoicedHelp'],
@@ -344,13 +346,13 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * The request is late: not done, its deadline before today
+     * The request is late: not done nor subcontracted, its deadline before today
      *
      * @return bool
      */
     public function isLate(): bool
     {
-        if (!empty($this->done) || empty($this->date_due) || (int) $this->status === self::STATUS_DELETED) {
+        if (!empty($this->done) || empty($this->date_due) || in_array((int) $this->status, [self::STATUS_DELETED, self::STATUS_SUBCONTRACTED], true)) {
             return false;
         }
         $due = is_numeric($this->date_due) ? (int) $this->date_due : (int) $this->db->jdate($this->date_due);
@@ -359,14 +361,14 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * Number of late requests (not done, deadline before today)
+     * Number of late requests (not done nor subcontracted, deadline before today)
      *
      * @return int
      */
     public function countLate(): int
     {
         $obj = $this->db->getRow('SELECT COUNT(rowid) AS nb FROM ' . $this->db->prefix() . $this->table_element
-            . ' WHERE entity IN (' . getEntity($this->element) . ') AND status >= 0 AND done = 0 AND date_due IS NOT NULL'
+            . ' WHERE entity IN (' . getEntity($this->element) . ') AND status >= 0 AND status <> ' . self::STATUS_SUBCONTRACTED . ' AND done = 0 AND date_due IS NOT NULL'
             . " AND date_due < '" . $this->db->idate(dol_get_first_hour(dol_now())) . "'");
 
         return is_object($obj) ? (int) $obj->nb : 0;
@@ -705,22 +707,55 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * Choose the state, then save: the ticks follow (pending = none, done = done, invoiced = done and invoiced)
+     * Choose the state, then save: the ticks follow (pending or subcontracted = none, done = done, invoiced = done and
+     * invoiced)
      *
      * @param  User $user  User choosing
-     * @param  int  $state STATUS_PENDING, STATUS_DONE or STATUS_INVOICED
+     * @param  int  $state A key of self::STATE_LABELS
      * @return int         Return integer < 0 if KO, > 0 if OK
      */
     public function setState(User $user, int $state): int
     {
-        if (!in_array($state, [self::STATUS_PENDING, self::STATUS_DONE, self::STATUS_INVOICED], true)) {
+        if (!$this->applyState($state)) {
             $this->error = 'BadState';
             return -1;
         }
-        $this->done     = $state >= self::STATUS_DONE ? 1 : 0;
-        $this->invoiced = $state == self::STATUS_INVOICED ? 1 : 0;
 
         return $this->update($user);
+    }
+
+    /**
+     * Give the request a state, not saved: its ticks, and the state itself (pending and subcontracted have the same
+     * ticks, none)
+     *
+     * @param  int  $state A key of self::STATE_LABELS
+     * @return bool        False when the state is not one
+     */
+    public function applyState(int $state): bool
+    {
+        if (!array_key_exists($state, self::STATE_LABELS)) {
+            return false;
+        }
+        $this->done     = in_array($state, [self::STATUS_DONE, self::STATUS_INVOICED], true) ? 1 : 0;
+        $this->invoiced = $state === self::STATUS_INVOICED ? 1 : 0;
+        if ((int) $this->status !== self::STATUS_DELETED) {
+            $this->status = $state;
+        }
+
+        return true;
+    }
+
+    /**
+     * The request is in this state, ticks included
+     *
+     * @param  int  $state A key of self::STATE_LABELS
+     * @return bool
+     */
+    public function hasState(int $state): bool
+    {
+        return array_key_exists($state, self::STATE_LABELS) && (int) $this->status === $state
+            && (int) $this->done === (in_array($state, [self::STATUS_DONE, self::STATUS_INVOICED], true) ? 1 : 0)
+            && (int) $this->invoiced === ($state === self::STATUS_INVOICED ? 1 : 0);
     }
 
     /**
@@ -803,8 +838,9 @@ class Tmd extends SaturneObject
                 $this->$userField = null;
             }
         }
+        // Neither ticked: subcontracted stays so, anything else is pending
         if ((int) $this->status !== self::STATUS_DELETED) {
-            $this->status = $this->invoiced ? self::STATUS_INVOICED : ($this->done ? self::STATUS_DONE : self::STATUS_PENDING);
+            $this->status = $this->invoiced ? self::STATUS_INVOICED : ($this->done ? self::STATUS_DONE : ((int) $this->status === self::STATUS_SUBCONTRACTED ? self::STATUS_SUBCONTRACTED : self::STATUS_PENDING));
         }
     }
 
@@ -874,16 +910,18 @@ class Tmd extends SaturneObject
         global $langs;
 
         $labels = [
-            self::STATUS_DELETED  => ['Deleted', 'status9'],
-            // Amber to do, green done (to invoice), grey closed: the colours of the cards above the list
-            self::STATUS_PENDING  => ['TmdStatusPending', 'status1'],
-            self::STATUS_DONE     => ['TmdStatusDone', 'status4'],
-            self::STATUS_INVOICED => ['TmdStatusInvoiced', 'status6'],
+            self::STATUS_DELETED       => ['Deleted', 'status9'],
+            // Amber to do, violet at a subcontractor, green done (to invoice), grey closed: the colours of the cards above
+            // the list (violet: a class of DoliTMD, no badge of Dolibarr has it)
+            self::STATUS_PENDING       => ['TmdStatusPending', 'status1'],
+            self::STATUS_SUBCONTRACTED => ['TmdStatusSubcontracted', 'status5', 'dolitmd-badge-subcontracted'],
+            self::STATUS_DONE          => ['TmdStatusDone', 'status4'],
+            self::STATUS_INVOICED      => ['TmdStatusInvoiced', 'status6'],
         ];
         $info  = $labels[$status] ?? $labels[self::STATUS_PENDING];
         $label = $langs->transnoentitiesnoconv($info[0]);
 
-        return dolGetStatus($label, $label, '', $info[1], $mode);
+        return dolGetStatus($label, $label, '', $info[1], $mode, '', !empty($info[2]) ? ['badgeParams' => ['css' => $info[2]]] : []);
     }
 
     /**
@@ -893,7 +931,7 @@ class Tmd extends SaturneObject
      */
     public function countByStatus(): array
     {
-        $out = [self::STATUS_PENDING => 0, self::STATUS_DONE => 0, self::STATUS_INVOICED => 0];
+        $out = [self::STATUS_PENDING => 0, self::STATUS_SUBCONTRACTED => 0, self::STATUS_DONE => 0, self::STATUS_INVOICED => 0];
         $sql = 'SELECT status, COUNT(rowid) AS nb FROM ' . $this->db->prefix() . $this->table_element;
         $sql .= ' WHERE entity IN (' . getEntity($this->element) . ') AND status >= 0 GROUP BY status';
         $resql = $this->db->query($sql);

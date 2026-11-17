@@ -279,7 +279,8 @@ class TmdMailer
         $langs->load('dolitmd@dolitmd');
         $p    = $this->db->prefix();
         $sql  = 'SELECT t.rowid, t.fk_ticket, k.fk_user_assign FROM ' . $p . 'dolitmd_tmd AS t LEFT JOIN ' . $p . 'ticket AS k ON k.rowid = t.fk_ticket';
-        $sql .= ' WHERE t.entity IN (' . getEntity('tmd') . ') AND t.status >= 0 AND t.done = 0 AND t.date_due IS NOT NULL';
+        // A subcontracted request is never late (Tmd::isLate())
+        $sql .= ' WHERE t.entity IN (' . getEntity('tmd') . ') AND t.status >= 0 AND t.status <> ' . Tmd::STATUS_SUBCONTRACTED . ' AND t.done = 0 AND t.date_due IS NOT NULL';
         $sql .= " AND t.date_due < '" . $this->db->idate(dol_get_first_hour(dol_now())) . "' ORDER BY t.date_due ASC LIMIT 500";
         $rows = $this->db->getRows($sql);
 
