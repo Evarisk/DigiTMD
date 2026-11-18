@@ -831,15 +831,24 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * nomeref ID in the name of a document: the number starting with X or E (« PB ADR FRANCE X1640869.pdf » → X1640869,
-     * « PB8 ADR ESPAGNE E0289516.pdf » → E0289516)
+     * First letters of a nomeref ID: X generic, A ADR / ADN, R RID, M IMDG, I IATA, O OACI, U UN number, C customer,
+     * P product, S substance, D waste, N not regulated, E exempted, T temporary, H history, G generic (N.O.S.)
+     */
+    public const SOFTWARE_REF_PREFIXES = 'XARMIOUCPSDNETHG';
+
+    /**
+     * nomeref ID in the name of a document: one of the first letters of SOFTWARE_REF_PREFIXES, maybe a second letter,
+     * then 5 digits or more (« PB ADR FRANCE X1640869.pdf » → X1640869, « PB8 ADR ESPAGNE E0289516.pdf » → E0289516,
+     * « PB8 ADR FRANCE EV00001658.pdf » → EV00001658). A UN number (UN1203) has 4 digits only: never taken
      *
      * @param  string $fileName Name of the file
      * @return string           ID in upper case, empty when the name has none
      */
     public static function softwareRefFromFileName(string $fileName): string
     {
-        return preg_match('/(?<![A-Za-z0-9])[XE]\d{5,}(?![0-9])/i', pathinfo($fileName, PATHINFO_FILENAME), $matches) ? strtoupper($matches[0]) : '';
+        $pattern = '/(?<![A-Za-z0-9])[' . self::SOFTWARE_REF_PREFIXES . '][A-Z]?\d{5,}(?![0-9])/i';
+
+        return preg_match($pattern, pathinfo($fileName, PATHINFO_FILENAME), $matches) ? strtoupper($matches[0]) : '';
     }
 
     /**
@@ -866,7 +875,7 @@ class Tmd extends SaturneObject
 
     /**
      * Request without nomeref ID: taken from the documents already in its tab Documents, the oldest document with a
-     * number in X or E first. Without the trigger of the document (added before this was done, or by another way than
+     * nomeref ID first. Without the trigger of the document (added before this was done, or by another way than
      * the tab): at the display of the card and by the scheduled job
      *
      * @param  User $user User filling
@@ -892,7 +901,7 @@ class Tmd extends SaturneObject
 
     /**
      * Requests still without nomeref ID: taken from the documents already in their tab Documents, the oldest document
-     * with a number in X or E first (the documents added before this was done, or by another way than the tab)
+     * with a nomeref ID first (the documents added before this was done, or by another way than the tab)
      *
      * @param  User $user  User of the scheduled job
      * @param  int  $limit Requests looked at, at most
