@@ -8,6 +8,13 @@ $dt-subcontracted: #6d28d9;
 $dt-subcontracted-soft: #ede9fe;
 $dt-subcontracted-border: rgba(124, 58, 237, .3);
 
+// Invoiced not ticked yet: a soft red, clear without shouting
+$dt-missing: #d64545;
+$dt-missing-strong: #c53030;
+$dt-missing-soft: #fdf0f0;
+$dt-missing-soft-hover: #fbe2e2;
+$dt-missing-border: rgba(214, 69, 69, .28);
+
 // Banner: cards of the states, then the quick filters
 .dolitmd-list-banner {
   display: flex;
@@ -39,8 +46,8 @@ body#mainbody .dolitmd-list-banner .saturne-kpi-cards .saturne-kpi-card {
   white-space: nowrap;
 }
 
-// Done / invoiced: a picto, faint when it is not so, in its colour when it is (green done, blue invoiced). Clicked, it
-// changes at once
+// Done / invoiced: a picto, faint when it is not so (soft red for the invoice), in its colour when it is (green done,
+// blue invoiced). Clicked, it changes at once
 .dolitmd-flag {
   display: inline-flex;
   align-items: center;
@@ -75,9 +82,21 @@ body#mainbody .dolitmd-list-banner .saturne-kpi-cards .saturne-kpi-card {
     transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .1s ease;
   }
 
-  &:hover .dolitmd-flag-icon {
+  &:not(.dolitmd-flag--readonly):hover .dolitmd-flag-icon {
     color: var(--saturne-muted, #64748b);
     background: var(--saturne-bg, #f1f5f9);
+  }
+
+  // Not invoiced yet: soft red, the invoice is left to do
+  &.dolitmd-flag--invoiced:not(.dolitmd-flag--on) .dolitmd-flag-icon {
+    color: $dt-missing;
+    background: $dt-missing-soft;
+    border-color: $dt-missing-border;
+  }
+
+  &.dolitmd-flag--invoiced:not(.dolitmd-flag--on):not(.dolitmd-flag--readonly):hover .dolitmd-flag-icon {
+    color: $dt-missing-strong;
+    background: $dt-missing-soft-hover;
   }
 
   &:active .dolitmd-flag-icon {
@@ -109,10 +128,6 @@ body#mainbody .dolitmd-list-banner .saturne-kpi-cards .saturne-kpi-card {
 
   &.dolitmd-flag--readonly {
     cursor: default;
-
-    &:hover .dolitmd-flag-icon {
-      background: transparent;
-    }
   }
 }
 
