@@ -124,6 +124,41 @@ class Tmd extends SaturneObject
     public const CATEGORY_PICTOS = ['ADR' => 'fa-truck-moving', 'IATA' => 'fa-plane', 'IMDG' => 'fa-ship'];
 
     /**
+     * Countries of Europe (ISO 3166 codes), with the countries partly in Europe (Turkey, Russia, the Caucasus,
+     * Kazakhstan): the road can go there. Any other country is reached by air or by sea, never by the ADR alone
+     */
+    public const EUROPE_COUNTRIES = [
+        'AD', 'AL', 'AM', 'AT', 'AX', 'AZ', 'BA', 'BE', 'BG', 'BY', 'CH', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FO',
+        'FR', 'GB', 'GE', 'GG', 'GI', 'GR', 'HR', 'HU', 'IE', 'IM', 'IS', 'IT', 'JE', 'KZ', 'LI', 'LT', 'LU', 'LV', 'MC',
+        'MD', 'ME', 'MK', 'MT', 'NL', 'NO', 'PL', 'PT', 'RO', 'RS', 'RU', 'SE', 'SI', 'SJ', 'SK', 'SM', 'TR', 'UA', 'VA',
+        'XK',
+    ];
+
+    /**
+     * Names of countries the dictionary of Dolibarr does not have (short names, old names, parts of the world), with
+     * their code: ZZ for a part of the world outside Europe
+     */
+    public const COUNTRY_ALIASES = [
+        'USA' => 'US', 'U.S.A.' => 'US', 'Amérique' => 'ZZ', 'Amériques' => 'ZZ', 'America' => 'ZZ', 'Afrique' => 'ZZ',
+        'Africa' => 'ZZ', 'Asie' => 'ZZ', 'Asia' => 'ZZ', 'Océanie' => 'ZZ', 'Oceania' => 'ZZ', 'Antilles' => 'ZZ',
+        'DOM-TOM' => 'ZZ', 'DOM TOM' => 'ZZ', 'Outre-mer' => 'ZZ', 'Dubaï' => 'AE', 'Abu Dhabi' => 'AE', 'Emirats' => 'AE',
+        'UAE' => 'AE', 'Corée' => 'KR', 'Korea' => 'KR', 'Taïwan' => 'TW', 'Vietnam' => 'VN', 'Birmanie' => 'MM',
+        'Guyane' => 'GF', 'Polynésie' => 'PF', 'Tahiti' => 'PF', 'Ile Maurice' => 'MU', 'La Réunion' => 'RE', 'Ile de la Réunion' => 'RE', 'Russie' => 'RU', 'Tchéquie' => 'CZ',
+        'Tchèque' => 'CZ', 'Angleterre' => 'GB', 'Ecosse' => 'GB', 'Grande-Bretagne' => 'GB', 'UK' => 'GB',
+        'Hollande' => 'NL', 'Kosovo' => 'XK',
+    ];
+
+    /**
+     * Names of countries that are also usual words, first names or places of France (« suite à la réunion »,
+     * « Maurice », « incident bénin », « Saint-Martin »): read in a subject or the name of a document, never in the
+     * text of a mail
+     */
+    public const COUNTRY_NAMES_TITLE_ONLY = [
+        'REUNION', 'LA REUNION', 'MAURICE', 'DOMINIQUE', 'GRENADE', 'BENIN', 'SALVADOR', 'MONTSERRAT', 'SAINT MARTIN',
+        'SAINTE HELENE', 'SAINT BARTHELEMY', 'SAINTE LUCIE', 'CHAD', 'JORDAN',
+    ];
+
+    /**
      * @var array Array with all fields and their property. Do not use it as a static var. It may be modified by constructor
      */
     public $fields = [
@@ -371,8 +406,8 @@ class Tmd extends SaturneObject
         if (empty($this->track_id)) {
             $this->track_id = self::generateTrackId();
         }
-        // Not chosen: the one the subject names (mail received, form left empty, API)
-        $this->category = self::normalizeCategory($this->category) ?? self::normalizeCategory(self::categoryFromText((string) $this->label));
+        // Not chosen: the one the subject names, else its country (mail received, form left empty, API)
+        $this->category = self::normalizeCategory($this->category) ?? self::normalizeCategory(self::categoryFromMail((string) $this->label, ''));
 
         // Deadline: the date of the mail (or today) plus the delay of the setup, 0 = no deadline
         $delay = getDolGlobalInt('DOLITMD_DELAY_DAYS', 15);
@@ -764,7 +799,7 @@ class Tmd extends SaturneObject
     /**
      * Category named by a mail: its subject first, else its text (the words of the sender, not the mails it answers:
      * a new request written as an answer to the previous one would take its category). A forwarded mail: the mail
-     * forwarded too, the request is there
+     * forwarded too, the request is there. None named: the country of the shipment (categoryFromCountry())
      *
      * @param  string $subject Subject of the mail
      * @param  string $body    Text of the mail
@@ -773,16 +808,108 @@ class Tmd extends SaturneObject
     public static function categoryFromMail(string $subject, string $body): string
     {
         $category = self::categoryFromText($subject);
-        if ($category !== '' || trim($body) === '') {
+        if ($category !== '') {
             return $category;
         }
         [$own, $quoted] = self::splitQuotedText($body);
+        $forwarded      = $quoted !== '' && preg_match('/^\s*(?:TR|FW|FWD|WG)\s*:/i', $subject);
         $category       = self::categoryFromText($own, self::CATEGORY_BODY_PATTERNS);
-        if ($category === '' && $quoted !== '' && preg_match('/^\s*(?:TR|FW|FWD|WG)\s*:/i', $subject)) {
+        if ($category === '' && $forwarded) {
             $category = self::categoryFromText($quoted, self::CATEGORY_BODY_PATTERNS);
         }
 
-        return $category;
+        return $category !== '' ? $category : self::categoryFromCountry($subject, $own . ($forwarded ? "\n" . $quoted : ''));
+    }
+
+    /**
+     * Category given by the country of the shipment: outside Europe the road cannot go, it is not ADR but the air
+     * (IATA) most of the time; a shipment by sea names its ship, read before (categoryFromText()). The countries named
+     * by the title (subject of the mail, name of a document), else by the text. A title naming only countries of
+     * Europe decides alone: nothing, the road or not, the text is not read (the address in a signature)
+     *
+     * @param  string $title Subject of the mail, name of a document
+     * @param  string $text  Text of the mail (the words of the sender)
+     * @return string        IATA, empty when no country outside Europe is named
+     */
+    public static function categoryFromCountry(string $title, string $text = ''): string
+    {
+        $countries = self::countriesNamed($title, true);
+        if (empty($countries)) {
+            $countries = self::countriesNamed($text);
+        }
+
+        return empty(array_diff($countries, self::EUROPE_COUNTRIES)) ? '' : 'IATA';
+    }
+
+    /**
+     * Countries named by a text: their names in French and in English (dictionary of the countries of Dolibarr) and
+     * COUNTRY_ALIASES, whatever the case and the accents, whole words only. The text of a mail: without the names of
+     * COUNTRY_NAMES_TITLE_ONLY
+     *
+     * @param  string   $text  Text read
+     * @param  bool     $title True for a subject or the name of a document
+     * @return string[]        Codes of the countries named (ZZ: a part of the world outside Europe)
+     */
+    public static function countriesNamed(string $text, bool $title = false): array
+    {
+        $haystack = ' ' . self::normalizeCountryName($text) . ' ';
+        if (trim($haystack) === '') {
+            return [];
+        }
+        $codes = [];
+        foreach (self::countryNames() as $name => $code) {
+            if (($title || !in_array($name, self::COUNTRY_NAMES_TITLE_ONLY, true)) && strpos($haystack, ' ' . $name . ' ') !== false) {
+                $codes[$code] = $code;
+            }
+        }
+
+        return array_values($codes);
+    }
+
+    /**
+     * Names of the countries, normalized (normalizeCountryName()), with their code: the dictionary of Dolibarr in
+     * French and in English, then COUNTRY_ALIASES
+     *
+     * @return array<string,string> Code by name
+     */
+    protected static function countryNames(): array
+    {
+        global $conf;
+
+        static $names = null;
+        if ($names !== null) {
+            return $names;
+        }
+        $names = [];
+        foreach (['en_US', 'fr_FR'] as $lang) {
+            $dictionary = new Translate('', $conf);
+            $dictionary->setDefaultLang($lang);
+            $dictionary->load('dict');
+            foreach ($dictionary->tab_translate as $key => $label) {
+                if (preg_match('/^Country([A-Z]{2})$/', $key, $matches) && ($name = self::normalizeCountryName((string) $label)) !== '') {
+                    $names[$name] = $matches[1];
+                }
+            }
+        }
+        foreach (self::COUNTRY_ALIASES as $alias => $code) {
+            $names[self::normalizeCountryName($alias)] = $code;
+        }
+
+        return $names;
+    }
+
+    /**
+     * Text without HTML, accents and punctuation, in upper case, words separated by a space: « Etats-Unis » and
+     * « ÉTATS UNIS » are the same
+     *
+     * @param  string $text Text
+     * @return string       Normalized text
+     */
+    protected static function normalizeCountryName(string $text): string
+    {
+        $text = strtoupper(dol_string_unaccent(dol_string_nohtmltag($text, 0, 'UTF-8')));
+
+        return trim((string) preg_replace('/[^A-Z0-9]+/', ' ', $text));
     }
 
     /**
@@ -807,8 +934,9 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * Requests without category: the one their mail names, subject then text (requests made before the categories, at
-     * the activation of the module). Never a trigger: nothing else than the category changes
+     * Requests without category: the one their mail names, subject then text, else its country (requests made before
+     * the categories or before a rule: at the activation of the module and by the scheduled job). Never a trigger:
+     * nothing else than the category changes
      *
      * @return int Requests given a category
      */
@@ -900,7 +1028,8 @@ class Tmd extends SaturneObject
             $changed            = true;
         }
         if (self::normalizeCategory($this->category) === null) {
-            $category = self::categoryFromText(str_replace(['_', '-', '.'], ' ', pathinfo($fileName, PATHINFO_FILENAME)));
+            $name     = str_replace(['_', '-', '.'], ' ', pathinfo($fileName, PATHINFO_FILENAME));
+            $category = self::categoryFromText($name) ?: self::categoryFromCountry($name);
             if ($category !== '') {
                 $this->category = $category;
                 $changed        = true;
