@@ -113,6 +113,11 @@ objet (et l'expéditeur, colonne à ajouter ; sans tiers connu, l'adresse s'affi
   complet, sans l'extension, du premier document de l'onglet Documents dont le nom contient un identifiant nomeref
   (« PB2 ADR BULGARIE X1667682.pdf » → PB2 ADR BULGARIE X1667682) ; ce document donne aussi la catégorie si elle est
   vide. Un ID réduit au seul identifiant (règle précédente) est remplacé par le nom de son document.
+- **Catégorie** (ADR, IATA, IMDG) : reprise de l'objet du mail, sinon de son texte (avion, bateau, navire en plus),
+  sinon du **pays d'envoi** : hors d'Europe la route ne passe pas, ce n'est pas de l'ADR, la demande passe en IATA
+  (« DEMANDE DGD X1234567 PANAMA »). Le pays cité dans l'objet compte d'abord : un pays d'Europe seul n'y décide rien
+  (le texte n'est pas lu, l'adresse d'une signature ne compte pas). Les demandes sans catégorie sont relues par la
+  tâche planifiée.
 - **Ticket** : une demande qui passe à Fait (ou Facturé) ferme son ticket (résolu) ; remise En attente, elle le rouvre.
 - **Actions de masse** : Passer à Facturé, Passer à Fait, Remettre en attente (avec confirmation), export, suppression.
 - Au-dessus : le nombre de demandes par état (mis à jour en direct) et les filtres rapides.
