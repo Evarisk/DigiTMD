@@ -30,8 +30,11 @@ if (empty($thread)) {
     return;
 }
 
+require_once DOL_DOCUMENT_ROOT . '/core/lib/images.lib.php';
+
 $canOpenFiles = $user->hasRight('ticket', 'read');
-$icons        = ['dolitmd_request' => 'fa-envelope', 'ticket_msg' => 'fa-comment', 'ticket_msg_private' => 'fa-lock', 'ticket_msg_sentbymail' => 'fa-paper-plane', 'ticket_msg_private_sentbymail' => 'fa-paper-plane'];
+$entityParam  = 'entity=' . ((int) $conf->entity);
+$icons       = ['dolitmd_request' => 'fa-envelope', 'ticket_msg' => 'fa-comment', 'ticket_msg_private' => 'fa-lock', 'ticket_msg_sentbymail' => 'fa-paper-plane', 'ticket_msg_private_sentbymail' => 'fa-paper-plane'];
 
 print '<div class="dolitmd-request">';
 print load_fiche_titre($langs->trans('TmdRequestContent'), '', 'fa-envelope-open-text');
@@ -52,13 +55,31 @@ foreach ($thread as $item) {
     if (!empty($item['files'])) {
         print '<div class="timeline-footer dolitmd-request-files">';
         foreach ($item['files'] as $file) {
-            $label = img_mime($file['name'], '', 'pictofixedwidth') . dol_escape_htmltag($file['name']) . ' <span class="opacitymedium">(' . dol_print_size($file['size']) . ')</span>';
+            // A tile per file: the image itself or the picto of its type, opened in the preview of Dolibarr (images, PDF,
+            // text, videos: the window of document_preview, a new tab on a phone), the others downloaded
+            $name    = dol_escape_htmltag($file['name']);
+            $query   = 'modulepart=ticket&' . $entityParam . '&file=' . urlencode($file['path']);
+            $isImage = image_format_supported($file['name']) > 0;
+            $thumb   = ($canOpenFiles && $isImage) ? '<img src="' . dol_escape_htmltag(DOL_URL_ROOT . '/viewimage.php?' . $query) . '" alt="" loading="lazy">' : img_mime($file['name'], '', 'dolitmd-file-icon');
+            $info    = '<span class="dolitmd-file-info"><span class="dolitmd-file-name">' . $name . '</span><span class="dolitmd-file-size">' . dol_print_size($file['size']) . '</span></span>';
+
+            print '<div class="dolitmd-file' . ($isImage ? ' dolitmd-file-image' : '') . '" title="' . $name . '">';
             if ($canOpenFiles) {
-                $url = DOL_URL_ROOT . '/document.php?modulepart=ticket&attachment=0&entity=' . ((int) $conf->entity) . '&file=' . urlencode($file['path']);
-                print '<a class="dolitmd-request-file" href="' . dol_escape_htmltag($url) . '" target="_blank" rel="noopener">' . $label . '</a>';
+                $download = DOL_URL_ROOT . '/document.php?' . $query . '&attachment=1';
+                $preview  = getAdvancedPreviewUrl('ticket', $file['path'], 1, $entityParam);
+                if (!empty($preview)) {
+                    print '<a class="dolitmd-file-open ' . $preview['css'] . '" href="' . dol_escape_htmltag($preview['url']) . '" mime="' . dol_escape_htmltag($preview['mime']) . '" data-title="' . $name . '" target="_blank" rel="noopener">';
+                    print '<span class="dolitmd-file-thumb">' . $thumb . '<span class="dolitmd-file-zoom"><i class="fa fa-search-plus"></i> ' . $langs->trans('Preview') . '</span></span>';
+                } else {
+                    print '<a class="dolitmd-file-open" href="' . dol_escape_htmltag($download) . '">';
+                    print '<span class="dolitmd-file-thumb">' . $thumb . '</span>';
+                }
+                print $info . '</a>';
+                print '<a class="dolitmd-file-download" href="' . dol_escape_htmltag($download) . '" title="' . dol_escape_htmltag($langs->trans('Download')) . '"><i class="fa fa-download"></i></a>';
             } else {
-                print '<span class="dolitmd-request-file">' . $label . '</span>';
+                print '<span class="dolitmd-file-open"><span class="dolitmd-file-thumb">' . $thumb . '</span>' . $info . '</span>';
             }
+            print '</div>';
         }
         print '</div>';
     }
