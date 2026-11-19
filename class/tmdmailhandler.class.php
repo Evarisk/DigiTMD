@@ -806,7 +806,7 @@ class TmdMailHandler
      * Scheduled job: fetches the mails of the TMD mailbox (Inbox), then makes the ticket and the request of each mail
      * received since the mailbox was chosen that has none yet. Enough by itself: neither the scheduled job of Inbox
      * nor its trigger INBOX_MAIL_RECEIVED are needed. First, the requests without nomeref ID take it from the
-     * documents already in their tab Documents
+     * documents already in their tab Documents, and the requests without category the one of their mail
      *
      * @return int 0 if OK, < 0 if KO
      */
@@ -815,6 +815,7 @@ class TmdMailHandler
         global $conf, $user;
 
         $filled       = (new Tmd($this->db))->fillMissingSoftwareRefs($user);
+        (new Tmd($this->db))->fillMissingCategories();
         $this->output = '';
         $mailbox      = self::configuredMailbox($this->db);
         if ($mailbox === null) {
