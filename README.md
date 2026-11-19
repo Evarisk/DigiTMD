@@ -53,6 +53,13 @@ ses pièces jointes, et le mail lié dans l'onglet Mails). Il est reconnu au Mes
 références, au numéro de suivi Dolibarr du ticket (mail écrit depuis le ticket), ou à la référence du ticket
 (`[TS2611-0043]`) ou de la demande dans son objet. La liste montre le nombre de réponses devant l'objet.
 
+Un mail du fil d'une demande qui parle d'autre chose est une **nouvelle demande** : un client écrit souvent sa
+nouvelle demande en répondant dans Outlook à l'ancienne et en changeant l'objet. L'objet du mail doit reprendre
+celui de la demande (« RE: », « TR: », « RELANCE », les balises entre crochets et la ponctuation ne comptent pas) sans
+autre numéro, ou citer la référence de la demande ou de son ticket : « DEMANDE DGD X1234567 PANAMA » écrit en
+réponse à « DEMANDE DGD X7654321 COLOMBIE » crée sa demande. Quand la boîte n'est qu'en copie, le mail reste un
+message du ticket du fil, quel que soit son objet.
+
 ### Délais et retards
 
 Chaque demande reçoit une échéance : date de réception plus le délai de la configuration (15 jours par défaut,
