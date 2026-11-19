@@ -109,7 +109,10 @@ objet (et l'expéditeur, colonne à ajouter ; sans tiers connu, l'adresse s'affi
 - **État** (En attente, Fait, Facturé) : choisi directement dans la liste, aux couleurs de son badge.
 - **Suivi** : deux pictos, Fait et Facturé, changés d'un clic. Facturé implique Fait (cocher Facturé coche Fait,
   décocher Fait décoche Facturé) ; l'état suit.
-- **ID nomeref** : saisi directement dans la liste (Entrée enregistre, Échap annule).
+- **ID nomeref** : saisi directement dans la liste (Entrée enregistre, Échap annule). Vide, il prend tout seul le nom
+  complet, sans l'extension, du premier document de l'onglet Documents dont le nom contient un identifiant nomeref
+  (« PB2 ADR BULGARIE X1667682.pdf » → PB2 ADR BULGARIE X1667682) ; ce document donne aussi la catégorie si elle est
+  vide. Un ID réduit au seul identifiant (règle précédente) est remplacé par le nom de son document.
 - **Ticket** : une demande qui passe à Fait (ou Facturé) ferme son ticket (résolu) ; remise En attente, elle le rouvre.
 - **Actions de masse** : Passer à Facturé, Passer à Fait, Remettre en attente (avec confirmation), export, suppression.
 - Au-dessus : le nombre de demandes par état (mis à jour en direct) et les filtres rapides.
