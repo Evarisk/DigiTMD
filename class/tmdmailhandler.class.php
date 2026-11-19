@@ -186,15 +186,21 @@ class TmdMailHandler
         $message              = $this->readMessage((string) ($mailbox->email ?? ''), $messageId, $author);
         $dateMail             = $row->date_received ? $this->db->jdate($row->date_received) : ($row->date_mail ? $this->db->jdate($row->date_mail) : dol_now());
 
-        // An answer about a request: a message of its ticket, never a new request
+        // An answer about a request: a message of its ticket, never a new request. A mail of the thread of a request
+        // whose subject is about something else is a new request: a customer writes it by answering an old request in
+        // Outlook and changing the subject
         $parentId = $this->findParentRequest($row);
+        // An answer of a thread the mailbox only gets in copy (a consultant answering the customer): never a request,
+        // kept in the ticket of the thread whatever its subject
+        if ($parentId <= 0 && $this->isCopiedAnswer($row, $mailbox)) {
+            $parentId = $this->findParentRequest($row, false);
+            if ($parentId <= 0) {
+                $this->leaveOut($row, $sender, $dateMail);
+                return 0;
+            }
+        }
         if ($parentId > 0) {
             $this->appendReply($parentId, $row, $message, $sender, $dateMail, $author, $mailbox);
-            return 0;
-        }
-        // An answer of a thread the mailbox only gets in copy (a consultant answering the customer): never a request
-        if ($this->isCopiedAnswer($row, $mailbox)) {
-            $this->leaveOut($row, $sender, $dateMail);
             return 0;
         }
 
@@ -301,13 +307,15 @@ class TmdMailHandler
     }
 
     /**
-     * Request an answer is about: the Message-ID of a request in its references, the track id of Dolibarr of a ticket
-     * of a request (a mail written from the ticket), else the reference of a ticket or of a request in its subject
+     * Request an answer is about: the Message-ID of a request in its references when its subject is about this request
+     * (isAboutRequest()), the track id of Dolibarr of a ticket of a request (a mail written from the ticket), else the
+     * reference of a ticket or of a request in its subject
      *
-     * @param  object $row Row of llx_inbox_mail (message_id, in_reply_to, refs, subject)
-     * @return int         Id of the request, 0 when the mail is a new request
+     * @param  object $row          Row of llx_inbox_mail (message_id, in_reply_to, refs, subject)
+     * @param  bool   $checkSubject False: the newest request of the thread, whatever the subject of the mail
+     * @return int                  Id of the request, 0 when the mail is a new request
      */
-    public function findParentRequest(object $row): int
+    public function findParentRequest(object $row, bool $checkSubject = true): int
     {
         $p      = $this->db->prefix();
         $entity = getEntity('tmd');
@@ -326,9 +334,16 @@ class TmdMailHandler
             $in  = implode(',', array_map(function ($id) {
                 return "'" . $this->db->escape($id) . "'";
             }, array_slice($ids, 0, 50)));
-            $obj = $this->db->getRow('SELECT rowid FROM ' . $p . 'dolitmd_tmd WHERE entity IN (' . $entity . ') AND status >= 0 AND message_id IN (' . $in . ') ORDER BY rowid DESC');
-            if (is_object($obj)) {
-                return (int) $obj->rowid;
+            // Every request of the thread, the newest first: the mail goes to the one its subject is about
+            $sql  = 'SELECT t.rowid, t.ref, t.label, k.ref AS ticket_ref, k.track_id,';
+            $sql .= ' (SELECT m.subject FROM ' . $p . 'inbox_mail AS m WHERE m.message_id = t.message_id ORDER BY m.rowid LIMIT 1) AS first_subject';
+            $sql .= ' FROM ' . $p . 'dolitmd_tmd AS t LEFT JOIN ' . $p . 'ticket AS k ON k.rowid = t.fk_ticket';
+            $sql .= ' WHERE t.entity IN (' . $entity . ') AND t.status >= 0 AND t.message_id IN (' . $in . ') ORDER BY t.rowid DESC LIMIT 50';
+            $rows = $this->db->getRows($sql);
+            foreach (is_array($rows) ? $rows : [] as $obj) {
+                if (!$checkSubject || self::isAboutRequest((string) $row->subject, $obj)) {
+                    return (int) $obj->rowid;
+                }
             }
             foreach ($ids as $id) {
                 if (preg_match('/-tic(\d+)@/', $id, $match)) {
@@ -358,6 +373,71 @@ class TmdMailHandler
         }
 
         return 0;
+    }
+
+    /**
+     * A subject about a request: the reference of the request, of its ticket or the track id of its ticket, else its
+     * subject (label of the request or subject of its first mail) with words added around it (« RE: », « RELANCE »,
+     * « ANNULE ET REMPLACE PAR: ») but no other number: « DEMANDE DGD X1234567 PANAMA » is not about
+     * « DEMANDE DGD X7654321 COLOMBIE », nor about « DGD »
+     *
+     * @param  string $subject Subject of the mail
+     * @param  object $request Request: ref, label, ticket_ref, track_id, first_subject
+     * @return bool
+     */
+    public static function isAboutRequest(string $subject, object $request): bool
+    {
+        $text = self::subjectKey($subject);
+        if ($text === '') {
+            return true;
+        }
+        foreach ([$request->ref ?? '', $request->ticket_ref ?? '', $request->track_id ?? ''] as $ref) {
+            $ref = trim((string) $ref);
+            if ($ref !== '' && stripos($subject, $ref) !== false) {
+                return true;
+            }
+        }
+        $numbers = self::subjectNumbers($text);
+        foreach ([$request->label ?? '', $request->first_subject ?? ''] as $known) {
+            $key = self::subjectKey((string) $known);
+            if ($key !== '' && strpos(' ' . $text . ' ', ' ' . $key . ' ') !== false && !array_diff($numbers, self::subjectNumbers($key))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Subject to compare: lower case without accents, without « RE: », « TR: » and the like, tags in brackets
+     * ([TS2611-0001], [EXT]) nor punctuation
+     *
+     * @param  string $subject Subject of a mail
+     * @return string          Words separated by a space
+     */
+    public static function subjectKey(string $subject): string
+    {
+        $text = dol_string_unaccent(mb_strtolower(trim($subject), 'UTF-8'));
+        $text = (string) preg_replace('/\[[^\]]*\]/', ' ', $text);
+        do {
+            $before = $text;
+            $text   = (string) preg_replace('/^\s*(re|ref|tr|fw|fwd|aw|wg|sv|vs|antw|rif)\s*:\s*/', '', $text);
+        } while ($text !== $before);
+
+        return trim((string) preg_replace('/[^a-z0-9]+/', ' ', $text));
+    }
+
+    /**
+     * Numbers of a subject (nomeref IDs, orders): its words with a digit, 4 characters or more
+     *
+     * @param  string $key Subject to compare (subjectKey())
+     * @return string[]
+     */
+    protected static function subjectNumbers(string $key): array
+    {
+        return array_values(array_filter(explode(' ', $key), static function ($word) {
+            return strlen($word) >= 4 && preg_match('/\d/', $word);
+        }));
     }
 
     /**
