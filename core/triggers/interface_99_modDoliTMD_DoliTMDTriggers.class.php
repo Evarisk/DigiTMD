@@ -69,9 +69,10 @@ class InterfaceDoliTMDTriggers extends DolibarrTriggers
             return 0;
         }
 
-        // A document added to a request (tab Documents): the nomeref ID of its name (« PB ADR FRANCE X1640869.pdf »,
-        // « PB8 ADR FRANCE EV00001658.pdf », see Tmd::softwareRefFromFileName) is the nomeref ID of the request when it
-        // has none. Found by the source of the file, else by its folder
+        // A document added to a request (tab Documents): a name with a nomeref ID (« PB2 ADR BULGARIE X1667682.pdf »,
+        // see Tmd::softwareRefFromFileName) is the nomeref ID of the request, without its extension, when it has none,
+        // and its category when it has none (Tmd::fillSoftwareRefFromFile). Found by the source of the file, else by
+        // its folder
         if ($action === 'ECMFILES_CREATE' && !empty($object->filename)) {
             try {
                 require_once __DIR__ . '/../../class/tmd.class.php';

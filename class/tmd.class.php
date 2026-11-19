@@ -844,7 +844,7 @@ class Tmd extends SaturneObject
      * @param  string $fileName Name of the file
      * @return string           ID in upper case, empty when the name has none
      */
-    public static function softwareRefFromFileName(string $fileName): string
+    public static function softwareIdFromFileName(string $fileName): string
     {
         $pattern = '/(?<![A-Za-z0-9])[' . self::SOFTWARE_REF_PREFIXES . '][A-Z]?\d{5,}(?![0-9])/i';
 
@@ -852,38 +852,78 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * A document added to the request (tab Documents): the nomeref ID in its name fills the request when it has none.
-     * An ID already given is never changed
+     * nomeref ID of a request taken from a document: the whole name of the file without its extension, when it has a
+     * nomeref ID (softwareIdFromFileName()): « PB2 ADR BULGARIE X1667682.pdf » → PB2 ADR BULGARIE X1667682
      *
-     * @param  User   $user     User adding the document
      * @param  string $fileName Name of the file
-     * @return bool             ID filled
+     * @return string           Name of the file without extension, empty when the name has no nomeref ID
      */
-    public function fillSoftwareRefFromFile(User $user, string $fileName): bool
+    public static function softwareRefFromFileName(string $fileName): string
     {
-        if ($this->id <= 0 || trim((string) $this->software_ref) !== '' || (int) $this->status === self::STATUS_DELETED) {
-            return false;
+        if (self::softwareIdFromFileName($fileName) === '') {
+            return '';
         }
-        $softwareRef = self::softwareRefFromFileName($fileName);
-        if ($softwareRef === '') {
-            return false;
-        }
-        $this->software_ref = $softwareRef;
 
-        return $this->update($user) > 0;
+        return dol_trunc(trim((string) preg_replace('/\s+/u', ' ', pathinfo($fileName, PATHINFO_FILENAME))), 128, 'right', 'UTF-8', 1);
     }
 
     /**
-     * Request without nomeref ID: taken from the documents already in its tab Documents, the oldest document with a
-     * nomeref ID first. Without the trigger of the document (added before this was done, or by another way than
-     * the tab): at the display of the card and by the scheduled job
+     * nomeref ID given by the previous rule (the ID alone, « EV00001672 »): replaced by the name of its document
+     *
+     * @param  string $softwareRef nomeref ID of a request
+     * @return bool
+     */
+    protected static function isBareSoftwareId(string $softwareRef): bool
+    {
+        return (bool) preg_match('/^[' . self::SOFTWARE_REF_PREFIXES . '][A-Z]?\d{5,}$/i', trim($softwareRef));
+    }
+
+    /**
+     * A document with a nomeref ID added to the request (tab Documents): its name fills the nomeref ID of the request
+     * when it has none, or the ID alone of this document (previous rule), and its category (ADR, IATA, IMDG named in the
+     * name) when it has none. An ID or a category already given is never changed
+     *
+     * @param  User   $user     User adding the document
+     * @param  string $fileName Name of the file
+     * @return bool             ID or category filled
+     */
+    public function fillSoftwareRefFromFile(User $user, string $fileName): bool
+    {
+        $softwareRef = self::softwareRefFromFileName($fileName);
+        if ($this->id <= 0 || $softwareRef === '' || (int) $this->status === self::STATUS_DELETED) {
+            return false;
+        }
+        $changed = false;
+        $current = trim((string) $this->software_ref);
+        if ($current === '' || (strcasecmp($current, self::softwareIdFromFileName($fileName)) === 0 && $current !== $softwareRef)) {
+            $this->software_ref = $softwareRef;
+            $changed            = true;
+        }
+        if (self::normalizeCategory($this->category) === null) {
+            $category = self::categoryFromText(str_replace(['_', '-', '.'], ' ', pathinfo($fileName, PATHINFO_FILENAME)));
+            if ($category !== '') {
+                $this->category = $category;
+                $changed        = true;
+            }
+        }
+
+        return $changed && $this->update($user) > 0;
+    }
+
+    /**
+     * Request without nomeref ID or without category (or with the ID alone of the previous rule): taken from the
+     * documents already in its tab Documents, the oldest document with a nomeref ID first. Without the trigger of the
+     * document (added before this was done, or by another way than the tab): at the display of the card and by the
+     * scheduled job
      *
      * @param  User $user User filling
-     * @return bool       ID filled
+     * @return bool       ID or category filled
      */
     public function fillSoftwareRefFromDocuments(User $user): bool
     {
-        if ($this->id <= 0 || trim((string) $this->software_ref) !== '' || (int) $this->status === self::STATUS_DELETED) {
+        $softwareRef = trim((string) $this->software_ref);
+        $complete    = $softwareRef !== '' && !self::isBareSoftwareId($softwareRef) && self::normalizeCategory($this->category) !== null;
+        if ($this->id <= 0 || $complete || (int) $this->status === self::STATUS_DELETED) {
             return false;
         }
         $files = $this->getPublicFiles();
@@ -891,7 +931,7 @@ class Tmd extends SaturneObject
             return $a['date'] <=> $b['date'];
         });
         foreach ($files as $file) {
-            if (self::softwareRefFromFileName($file['name']) !== '') {
+            if (self::softwareIdFromFileName($file['name']) !== '') {
                 return $this->fillSoftwareRefFromFile($user, $file['name']);
             }
         }
@@ -900,17 +940,19 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * Requests still without nomeref ID: taken from the documents already in their tab Documents, the oldest document
-     * with a nomeref ID first (the documents added before this was done, or by another way than the tab)
+     * Requests still without nomeref ID or without category (or with the ID alone of the previous rule): taken from
+     * the documents already in their tab Documents, the oldest document with a nomeref ID first (the documents added
+     * before this was done, or by another way than the tab)
      *
      * @param  User $user  User of the scheduled job
      * @param  int  $limit Requests looked at, at most
-     * @return int         IDs filled
+     * @return int         Requests filled
      */
     public function fillMissingSoftwareRefs(User $user, int $limit = 200): int
     {
         $rows = $this->db->getRows('SELECT rowid FROM ' . $this->db->prefix() . $this->table_element . ' WHERE entity IN (' . getEntity($this->element) . ')'
-            . " AND status <> " . self::STATUS_DELETED . " AND (software_ref IS NULL OR software_ref = '') ORDER BY rowid DESC LIMIT " . max(1, $limit));
+            . ' AND status <> ' . self::STATUS_DELETED . " AND (software_ref IS NULL OR software_ref = '' OR category IS NULL OR category = ''"
+            . " OR (CHAR_LENGTH(software_ref) <= 16 AND software_ref NOT LIKE '% %')) ORDER BY rowid DESC LIMIT " . max(1, $limit));
         $filled = 0;
         foreach (is_array($rows) ? $rows : [] as $row) {
             $tmd = new self($this->db);
