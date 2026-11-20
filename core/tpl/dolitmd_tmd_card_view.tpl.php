@@ -21,7 +21,8 @@
  * \brief   Screen « view » of the card of a TMD request: the ticks are saved at once (js/modules/tmd.js)
  *
  * Rendered by view/tmd/tmd_card.php (inherits its scope).
- * Expects: $object, $form, $extrafields, $hookmanager, $langs, $action, $title, $permissiontoadd, $permissiontodelete
+ * Expects: $object, $form, $extrafields, $hookmanager, $langs, $action, $title, $permissiontoadd, $permissiontodelete,
+ *          $dropZone (null when no file may be dropped)
  */
 
 saturne_get_fiche_head($object, 'card', $title);
@@ -107,4 +108,9 @@ if ($action == 'presenddone' && !empty($doneForm) && $permissiontoadd) {
 // Unknown sender: the modal of the button « + » of its address
 if (empty($object->fk_soc) && !empty($object->email_from) && dolitmd_can_create_thirdparty($user)) {
     include __DIR__ . '/dolitmd_thirdparty_create_modal.tpl.php';
+}
+
+// Files dropped anywhere on the card: the cover shown while they are dragged
+if (!empty($dropZone)) {
+    include __DIR__ . '/dolitmd_tmd_card_dropzone.tpl.php';
 }

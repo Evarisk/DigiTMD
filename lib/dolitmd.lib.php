@@ -337,3 +337,21 @@ function dolitmd_inbox_mailboxes(): array
 
     return $out;
 }
+
+/**
+ * A document of the request in the mail « request done »: ticked to go as an attachment (form of the card, and the
+ * files dropped on the card while the form is open)
+ *
+ * @param  array{name:string,size:int} $file    Document of the tab Documents (Tmd::getPublicFiles())
+ * @param  bool                        $checked Attached
+ * @return string                               HTML of the line
+ */
+function dolitmd_done_file_html(array $file, bool $checked): string
+{
+    $fileId = 'dolitmd-file-' . dol_hash($file['name'], 'md5');
+
+    $out  = '<div><input type="checkbox" id="' . $fileId . '" name="files[]" value="' . dol_escape_htmltag($file['name']) . '"' . ($checked ? ' checked' : '') . '>';
+    $out .= ' <label for="' . $fileId . '">' . img_mime($file['name'], '', 'pictofixedwidth') . dol_escape_htmltag($file['name']) . ' <span class="opacitymedium">(' . dol_print_size($file['size']) . ')</span></label></div>';
+
+    return $out;
+}

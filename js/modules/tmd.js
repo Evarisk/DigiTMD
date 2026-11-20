@@ -17,7 +17,8 @@
 /**
  * \file    js/modules/tmd.js
  * \ingroup dolitmd
- * \brief   State and pictos done / invoiced of the TMD requests, saved at once (list and card)
+ * \brief   State and pictos done / invoiced of the TMD requests, saved at once (list and card); thirdparty of an
+ *          unknown sender; files dropped anywhere on the card
  */
 
 'use strict';
@@ -87,6 +88,10 @@ window.dolitmd.tmd.event = function() {
   $(document).on('click', '.dolitmd-soc-link', window.dolitmd.tmd.linkThirdparty);
   $(document).on('click', '.dolitmd-soc-link-existing', window.dolitmd.tmd.linkExistingThirdparty);
   $(document).on('keydown', '.select2-container, .dolitmd-soc-modal', window.dolitmd.tmd.thirdpartyModalEscape);
+  $(document).on('dragenter', window.dolitmd.tmd.onDragEnter);
+  $(document).on('dragover', window.dolitmd.tmd.onDragOver);
+  $(document).on('dragleave', window.dolitmd.tmd.onDragLeave);
+  $(document).on('drop', window.dolitmd.tmd.onDrop);
 };
 
 /**
@@ -380,5 +385,203 @@ window.dolitmd.tmd.sendThirdparty = function(modal, data) {
     const answer = xhr.responseJSON || {};
     window.dolitmd.tmd.thirdpartySaving(modal, false);
     window.dolitmd.tmd.thirdpartyError(modal, answer.error || modal.data('error'), answer.existing || null);
+  });
+};
+
+/**
+ * Dragged files entered and not left yet: the elements of the page fire one dragenter and one dragleave each
+ *
+ * @type {number}
+ */
+window.dolitmd.tmd.dragDepth = 0;
+
+/**
+ * Cover of the card of a request, taking the files dropped anywhere on it: none on the other pages, whose drops are
+ * left to their own handlers (zone of the tab Documents of Saturne...)
+ *
+ * @param   {Object} event Drag event
+ * @returns {jQuery}       Cover, empty when the event is not for it
+ */
+window.dolitmd.tmd.dropZone = function(event) {
+  const zone = $('.dolitmd-dropzone');
+  const saturneDocument = window.saturne && window.saturne.document;
+
+  if (!zone.length || !saturneDocument || typeof saturneDocument.isFileDrag !== 'function' || !saturneDocument.isFileDrag(event)) {
+    return $();
+  }
+  return zone;
+};
+
+/**
+ * Files dragged over the card: the cover shows where they go
+ *
+ * @param   {Object} event Drag event
+ * @returns {void}
+ */
+window.dolitmd.tmd.onDragEnter = function(event) {
+  const zone = window.dolitmd.tmd.dropZone(event);
+  if (!zone.length) {
+    return;
+  }
+  event.preventDefault();
+  window.dolitmd.tmd.dragDepth++;
+  zone.addClass('dolitmd-dropzone--visible');
+};
+
+/**
+ * The files may be dropped anywhere on the card, so the browser never opens them instead
+ *
+ * @param   {Object} event Drag event
+ * @returns {void}
+ */
+window.dolitmd.tmd.onDragOver = function(event) {
+  const zone = window.dolitmd.tmd.dropZone(event);
+  if (!zone.length) {
+    return;
+  }
+  event.preventDefault();
+  event.originalEvent.dataTransfer.dropEffect = 'copy';
+  zone.addClass('dolitmd-dropzone--visible');
+};
+
+/**
+ * The files left the window: the cover goes
+ *
+ * @param   {Object} event Drag event
+ * @returns {void}
+ */
+window.dolitmd.tmd.onDragLeave = function(event) {
+  const zone = window.dolitmd.tmd.dropZone(event);
+  if (!zone.length) {
+    return;
+  }
+  window.dolitmd.tmd.dragDepth--;
+  // relatedTarget is null once the pointer is out of the window
+  if (window.dolitmd.tmd.dragDepth <= 0 || event.originalEvent.relatedTarget === null) {
+    window.dolitmd.tmd.dragDepth = 0;
+    zone.removeClass('dolitmd-dropzone--visible');
+  }
+};
+
+/**
+ * Files dropped on the card: sent to the tab Documents of the request, then the card is read again (documents, nomeref
+ * ID taken from the name). With the mail « request done » open, the card stays as typed: the files are added to the
+ * attachments of the mail, ticked
+ *
+ * @param   {Object} event Drop event
+ * @returns {void}
+ */
+window.dolitmd.tmd.onDrop = function(event) {
+  const zone = window.dolitmd.tmd.dropZone(event);
+  if (!zone.length) {
+    return;
+  }
+  event.preventDefault();
+  window.dolitmd.tmd.dragDepth = 0;
+  zone.removeClass('dolitmd-dropzone--visible');
+  if (zone.hasClass('dolitmd-dropzone--sending')) {
+    return;
+  }
+
+  // A folder comes as a file the browser cannot read: left out, named to the user
+  const dataTransfer = event.originalEvent.dataTransfer;
+  const items        = $.grep(Array.prototype.slice.call(dataTransfer.items || []), function(item) {
+    return item.kind === 'file';
+  });
+  const files   = [];
+  const folders = [];
+  let size      = 0;
+  $.each(dataTransfer.files || [], function(index, file) {
+    const entry = items[index] && typeof items[index].webkitGetAsEntry === 'function' ? items[index].webkitGetAsEntry() : null;
+    if (entry && entry.isDirectory) {
+      folders.push(file.name);
+      return;
+    }
+    files.push(file);
+    size += file.size;
+  });
+  if (folders.length) {
+    window.dolitmd.tmd.notify(String(zone.data('label-folder')).replace('%s', folders.join(', ')), true);
+  }
+  if (!files.length) {
+    return;
+  }
+  // Over the limit of the server, PHP would drop the whole POST (token included): refused before sending
+  const maxSize = parseInt(zone.data('max-size'), 10) || 0;
+  if (maxSize > 0 && size > maxSize) {
+    window.dolitmd.tmd.notify(zone.data('label-too-big'), true);
+    return;
+  }
+
+  const list   = $('.dolitmd-senddone-files');
+  const inline = list.length > 0;
+  const data   = new window.FormData();
+  data.append('action', 'upload_files');
+  data.append('id', zone.data('id'));
+  data.append('token', window.dolitmd.tmd.token());
+  data.append('inline', inline ? '1' : '0');
+  $.each(files, function(index, file) {
+    data.append('userfile[]', file, file.name);
+  });
+
+  window.dolitmd.tmd.dropSending(zone, files.length);
+  $.ajax({
+    url: zone.data('url'),
+    type: 'POST',
+    data: data,
+    processData: false,
+    contentType: false,
+    dataType: 'json'
+  }).done(function(answer) {
+    // The messages of the upload are shown by the card read again
+    if (!inline) {
+      window.location.href = zone.data('card-url');
+      return;
+    }
+    window.dolitmd.tmd.dropSending(zone, 0);
+    if (answer && answer.files && answer.files.length) {
+      list.find('.dolitmd-senddone-nofile').remove();
+      $.each(answer.files, function(index, html) {
+        list.append(html);
+      });
+    }
+    window.dolitmd.tmd.notifyEvents(answer && answer.events);
+  }).fail(function(xhr) {
+    window.dolitmd.tmd.dropSending(zone, 0);
+    window.dolitmd.tmd.notify((xhr.responseJSON || {}).error || zone.data('label-error'), true);
+  });
+};
+
+/**
+ * Cover kept while the files are sent, with their number; 0 gives the cover back as it was
+ *
+ * @param   {jQuery} zone  Cover
+ * @param   {number} count Files being sent
+ * @returns {void}
+ */
+window.dolitmd.tmd.dropSending = function(zone, count) {
+  const title = zone.find('.dolitmd-dropzone-title');
+  if (zone.data('title') === undefined) {
+    zone.data('title', title.text());
+  }
+  zone.toggleClass('dolitmd-dropzone--sending', count > 0);
+  zone.find('.dolitmd-dropzone-icon').toggleClass('fa-cloud-upload-alt', count === 0).toggleClass('fa-spinner fa-spin', count > 0);
+  title.text(count > 0 ? String(zone.data('label-sending')).replace('%s', count) : zone.data('title'));
+};
+
+/**
+ * Messages of Dolibarr given back by ajax/tmd.php (setEventMessages of the upload), shown as Dolibarr shows them
+ *
+ * @param   {Object} events Messages by type: mesgs, warnings, errors
+ * @returns {void}
+ */
+window.dolitmd.tmd.notifyEvents = function(events) {
+  if (typeof $.jnotify !== 'function') {
+    return;
+  }
+  $.each({mesgs: 'ok', warnings: 'warning', errors: 'error'}, function(key, type) {
+    $.each((events && events[key]) || [], function(index, message) {
+      $.jnotify(message, type, type !== 'ok');
+    });
   });
 };
