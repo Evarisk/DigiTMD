@@ -465,7 +465,7 @@ window.dolitmd.tmd.onDragLeave = function(event) {
 
 /**
  * Files dropped on the card: sent to the tab Documents of the request, then the card is read again (documents, nomeref
- * ID taken from the name). With the mail « request done » open, the card stays as typed: the files are added to the
+ * ID taken from the name). With a mail to the customer open, the card stays as typed: the files are added to the
  * attachments of the mail, ticked
  *
  * @param   {Object} event Drop event
@@ -513,7 +513,7 @@ window.dolitmd.tmd.onDrop = function(event) {
     return;
   }
 
-  const list   = $('.dolitmd-senddone-files');
+  const list   = $('.dolitmd-sendmail-files');
   const inline = list.length > 0;
   const data   = new window.FormData();
   data.append('action', 'upload_files');
@@ -540,7 +540,7 @@ window.dolitmd.tmd.onDrop = function(event) {
     }
     window.dolitmd.tmd.dropSending(zone, 0);
     if (answer && answer.files && answer.files.length) {
-      list.find('.dolitmd-senddone-nofile').remove();
+      list.find('.dolitmd-sendmail-nofile').remove();
       $.each(answer.files, function(index, html) {
         list.append(html);
       });
