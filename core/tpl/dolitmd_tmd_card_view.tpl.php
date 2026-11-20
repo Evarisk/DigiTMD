@@ -22,7 +22,8 @@
  *
  * Rendered by view/tmd/tmd_card.php (inherits its scope).
  * Expects: $object, $form, $extrafields, $hookmanager, $langs, $action, $title, $permissiontoadd, $permissiontodelete,
- *          $dropZone (null when no file may be dropped)
+ *          $dropZone (null when no file may be dropped), $fileToDelete (document whose deletion is confirmed, empty when
+ *          none)
  */
 
 saturne_get_fiche_head($object, 'card', $title);
@@ -31,6 +32,9 @@ saturne_banner_tab($object);
 $formConfirm = '';
 if ($action == 'delete') {
     $formConfirm = $form->formconfirm($_SERVER['PHP_SELF'] . '?id=' . $object->id, $langs->trans('DeleteObject', $langs->transnoentities('TheTmd')), $langs->trans('ConfirmDeleteObject', $langs->transnoentities('TheTmd')), 'confirm_delete', '', 'yes', 1);
+} elseif ($action == 'deletefile' && $fileToDelete !== '') {
+    // A document of the line « Attached files », deleted once confirmed (action confirm_deletefile of the card)
+    $formConfirm = $form->formconfirm($_SERVER['PHP_SELF'] . '?id=' . $object->id . '&urlfile=' . urlencode($fileToDelete), $langs->trans('TmdDeleteDocument'), $langs->trans('TmdConfirmDeleteDocument', dol_escape_htmltag($fileToDelete)), 'confirm_deletefile', '', 'yes', 1);
 }
 $parameters = ['formConfirm' => $formConfirm];
 $resHook    = $hookmanager->executeHooks('formConfirm', $parameters, $object, $action);
@@ -58,7 +62,7 @@ print '</div>';
 $publicUrl = $object->getPublicUrl();
 print '<div class="fichehalfright">';
 if ($publicUrl !== '') {
-    $nbPublicFiles = count($object->getPublicFiles());
+    $publicFiles = $object->getPublicFiles();
     print '<div class="underbanner clearboth"></div>';
     print '<table class="border centpercent tableforfield">';
     print '<tr><td class="titlefield">' . $form->textwithpicto($langs->trans('TmdTrackId'), $langs->trans('TmdPublicTrackingHelp')) . '</td><td><span class="dolitmd-tracking-number">' . showValueWithClipboardCPButton((string) $object->track_id, 0) . '</span></td></tr>';
@@ -66,9 +70,16 @@ if ($publicUrl !== '') {
     print '<a href="' . dol_escape_htmltag($publicUrl) . '" target="_blank" rel="noopener"><i class="fas fa-globe pictofixedwidth"></i>' . $langs->trans('TmdPublicOpen') . '</a>';
     print ' <span class="opacitymedium marginleftonly">' . showValueWithClipboardCPButton($publicUrl, 0, $langs->transnoentities('TmdPublicCopyLink')) . '</span>';
     print '</td></tr>';
-    print '<tr><td>' . $langs->trans('Documents') . '</td><td>';
-    print '<a href="' . dol_escape_htmltag(dol_buildpath('/saturne/view/saturne_document.php', 1) . '?id=' . $object->id . '&module_name=DoliTMD&object_type=tmd') . '">' . img_picto('', 'file', 'class="pictofixedwidth"') . $langs->trans('TmdPublicDocumentsShared', $nbPublicFiles) . '</a>';
-    print '</td></tr>';
+    // The documents themselves, a line each, opened in the preview without going to the tab
+    if (!empty($publicFiles)) {
+        print '<tr><td class="tdtop">' . $langs->trans('Documents') . '</td><td>';
+        print '<div class="dolitmd-documents">';
+        foreach ($publicFiles as $file) {
+            print dolitmd_document_line_html($object, $file, $permissiontoadd);
+        }
+        print '</div>';
+        print '</td></tr>';
+    }
     print '</table>';
 }
 // The mail of the customer and the messages of its ticket, without opening the ticket
