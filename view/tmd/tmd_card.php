@@ -84,8 +84,9 @@ if ($object->id > 0 && $permissiontoadd && in_array($action, ['', 'view'], true)
  * Actions
  */
 
-$parameters = ['id' => $id];
-$resHook    = $hookmanager->executeHooks('doActions', $parameters, $object, $action);
+$fileToDelete = '';
+$parameters   = ['id' => $id];
+$resHook      = $hookmanager->executeHooks('doActions', $parameters, $object, $action);
 if ($resHook < 0) {
     setEventMessages($hookmanager->error, $hookmanager->errors, 'errors');
 }
@@ -148,6 +149,21 @@ if (empty($resHook)) {
             }
             setEventMessages($error, null, 'errors');
             $action = 'presenddone';
+        }
+    }
+
+    // A document of the line « Attached files » deleted once confirmed, as the tab Documents deletes it: the file, its
+    // thumbnails and its index (only its name is read, never a path)
+    if (in_array($action, ['deletefile', 'confirm_deletefile'], true) && $permissiontoadd && $object->id > 0) {
+        $urlfile = basename((string) GETPOST('urlfile', 'alpha', 0, null, null, 1));
+        if (in_array($urlfile, array_column($object->getPublicFiles(), 'name'), true)) {
+            $fileToDelete = $urlfile;
+        }
+        if ($action == 'confirm_deletefile' && $fileToDelete !== '') {
+            // Messages of the deletion (FileWasRemoved...)
+            $langs->load('other');
+            $upload_dir = $object->getUploadDir();
+            include DOL_DOCUMENT_ROOT . '/core/actions_linkedfiles.inc.php';
         }
     }
 

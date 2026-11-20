@@ -339,6 +339,48 @@ function dolitmd_inbox_mailboxes(): array
 }
 
 /**
+ * A document of the tab Documents on one line of the card: the picto of its type and its name, opened in the preview of
+ * Dolibarr (images, PDF, text, videos: the window of document_preview, a new tab on a phone) or downloaded for the
+ * other types, then its size and the buttons preview (types the preview shows), download and delete (confirmed first,
+ * action deletefile of the card)
+ *
+ * @param  Tmd                         $object    TMD request
+ * @param  array{name:string,size:int} $file      Document (Tmd::getPublicFiles())
+ * @param  bool                        $canDelete The user may delete it
+ * @return string                                 HTML of the line
+ */
+function dolitmd_document_line_html(Tmd $object, array $file, bool $canDelete): string
+{
+    global $conf, $langs;
+
+    $name        = dol_escape_htmltag($file['name']);
+    $path        = $object->element . '/' . dol_sanitizeFileName($object->ref) . '/' . $file['name'];
+    $entityParam = 'entity=' . ((int) $conf->entity);
+    $download    = DOL_URL_ROOT . '/document.php?modulepart=dolitmd&' . $entityParam . '&file=' . urlencode($path) . '&attachment=1';
+    $preview     = getAdvancedPreviewUrl('dolitmd', $path, 1, $entityParam);
+
+    $out = '<div class="dolitmd-document" title="' . $name . '">';
+    if (!empty($preview)) {
+        $out .= '<a class="dolitmd-document-open ' . $preview['css'] . '" href="' . dol_escape_htmltag($preview['url']) . '" mime="' . dol_escape_htmltag($preview['mime']) . '" data-title="' . $name . '" target="_blank" rel="noopener">';
+    } else {
+        $out .= '<a class="dolitmd-document-open" href="' . dol_escape_htmltag($download) . '">';
+    }
+    $out .= img_mime($file['name'], '', 'pictofixedwidth') . '<span class="dolitmd-document-name">' . $name . '</span></a>';
+    $out .= '<span class="dolitmd-document-size">' . dol_print_size($file['size']) . '</span>';
+    if (!empty($preview)) {
+        $out .= '<a class="dolitmd-document-action ' . $preview['css'] . '" href="' . dol_escape_htmltag($preview['url']) . '" mime="' . dol_escape_htmltag($preview['mime']) . '" data-title="' . $name . '" target="_blank" rel="noopener" title="' . dol_escape_htmltag($langs->trans('Preview')) . '"><i class="fa fa-search-plus"></i></a>';
+    }
+    $out .= '<a class="dolitmd-document-action" href="' . dol_escape_htmltag($download) . '" title="' . dol_escape_htmltag($langs->trans('Download')) . '"><i class="fa fa-download"></i></a>';
+    if ($canDelete) {
+        $delete = dol_buildpath('/dolitmd/view/tmd/tmd_card.php', 1) . '?id=' . ((int) $object->id) . '&action=deletefile&urlfile=' . urlencode($file['name']) . '&token=' . newToken();
+        $out   .= '<a class="dolitmd-document-action dolitmd-document-delete" href="' . dol_escape_htmltag($delete) . '" title="' . dol_escape_htmltag($langs->trans('TmdDeleteDocument')) . '"><i class="fa fa-trash"></i></a>';
+    }
+    $out .= '</div>';
+
+    return $out;
+}
+
+/**
  * A document of the request in the mail « request done »: ticked to go as an attachment (form of the card, and the
  * files dropped on the card while the form is open)
  *

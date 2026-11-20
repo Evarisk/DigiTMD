@@ -690,3 +690,57 @@ body#mainbody .dolitmd-sender-create {
 .dolitmd-dropzone-help {
   color: var(--saturne-muted, #64748b);
 }
+
+// Card, documents of the tab Documents: a line each (picto and name opened in the preview, size, download)
+.dolitmd-documents {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dolitmd-document {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dolitmd-document-open {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+
+  // fa-file-pdf-o in the older versions of Dolibarr
+  .fa-file-pdf,
+  .fa-file-pdf-o {
+    color: #dc2626;
+  }
+}
+
+.dolitmd-document-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dolitmd-document-size {
+  flex: none;
+  font-size: .85em;
+  color: var(--saturne-muted, #64748b);
+}
+
+// Preview, download and delete
+.dolitmd-document-action {
+  flex: none;
+  color: var(--saturne-muted, #64748b);
+
+  &:hover,
+  &:focus-visible {
+    color: var(--saturne-primary, #2563eb);
+  }
+
+  &.dolitmd-document-delete:hover,
+  &.dolitmd-document-delete:focus-visible {
+    color: $dt-missing-strong;
+  }
+}
