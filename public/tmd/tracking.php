@@ -76,7 +76,7 @@ if (!isModEnabled('dolitmd')) {
 }
 
 // Get parameters
-$trackId = trim(GETPOST('track_id', 'alphanohtml'));
+$trackId = GETPOSTISARRAY('track_id') ? '' : trim(GETPOST('track_id', 'alphanohtml')); // An array comes from no form of the page
 
 // Initialize technical objects
 $object = new Tmd($db);

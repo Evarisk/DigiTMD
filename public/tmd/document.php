@@ -75,8 +75,9 @@ if (!isModEnabled('dolitmd')) {
     httponly_accessforbidden('Not found', 404);
 }
 
-$trackId  = GETPOST('track_id', 'alphanohtml');
-$fileName = (string) GETPOST('file', 'none'); // Only compared with the names of the documents, never used as a path
+// A parameter sent as an array comes from no link of the page: the same answer as an unknown number
+$trackId  = GETPOSTISARRAY('track_id') ? '' : GETPOST('track_id', 'alphanohtml');
+$fileName = GETPOSTISARRAY('file') ? '' : (string) GETPOST('file', 'none'); // Only compared with the names of the documents, never used as a path
 
 // The request of the tracking number, then the file among its documents by its name: nothing else can be reached
 $object = new Tmd($db);
@@ -93,11 +94,11 @@ if ($file === null || !is_file($file['fullname']) || !is_readable($file['fullnam
     httponly_accessforbidden('Not found', 404);
 }
 
-// PDF and pictures open in the browser, any other file is downloaded. The type comes from the extension, never
-// sniffed, and the file may run nothing in the page of the site
-$mime   = dol_mimetype($file['name']);
-$inline = in_array($mime, ['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp'], true);
-if (!$inline) {
+// Every file is downloaded, PDF and pictures too: the button of the page says « Download », and the PDF viewer of the
+// browser is never needed (some browsers block it). The type comes from the extension, never sniffed, and the file
+// may run nothing in the page of the site
+$mime = dol_mimetype($file['name']);
+if (!in_array($mime, ['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp'], true)) {
     $mime = 'application/octet-stream';
 }
 $encodedName = rawurlencode($file['name']);
@@ -110,7 +111,7 @@ if (ob_get_level()) {
 }
 header('Content-Type: ' . $mime);
 header('Content-Length: ' . dol_filesize($file['fullname']));
-header('Content-Disposition: ' . ($inline ? 'inline' : 'attachment') . '; filename="' . $asciiName . '"; filename*=UTF-8\'\'' . $encodedName);
+header('Content-Disposition: attachment; filename="' . $asciiName . '"; filename*=UTF-8\'\'' . $encodedName);
 header('X-Content-Type-Options: nosniff');
 header("Content-Security-Policy: default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
 header('Referrer-Policy: no-referrer');
