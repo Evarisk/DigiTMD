@@ -98,6 +98,12 @@ Dolibarr) :
 - **Demande traitée** au client quand la demande passe à Fait, avec le lien de sa page de suivi ;
 - **Rappel des retards**, chaque matin, à chaque personne assignée au ticket.
 
+Depuis la fiche, relus avant l'envoi (destinataires, copies, objet, texte, documents) :
+
+- **Envoyer un message** : une question ou une pièce manquante pendant le traitement, dans la conversation de la
+  demande ; la demande garde son état. Modèle « Message au client » (objet et formule de politesse) ;
+- **Envoyer « demande traitée »** : les documents de la demande joints, puis la demande passe à Fait.
+
 Les mails envoyés au client sont écrits dans les messages du ticket. L'ID nomeref, interne, n'est
 jamais proposé aux modèles.
 

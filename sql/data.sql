@@ -26,6 +26,16 @@ SELECT 0, 'dolitmd', 'dolitmd_tmd', '', 0, null, null, '(TmdMailAckTemplate)', 1
 FROM DUAL
 WHERE NOT EXISTS (SELECT rowid FROM llx_c_email_templates WHERE type_template = 'dolitmd_tmd' AND label = '(TmdMailAckTemplate)');
 
+-- Message to the customer while the request is being done (button « Send a message » of the card): the text is typed
+-- there, the template gives the subject of the conversation and the greetings
+INSERT INTO llx_c_email_templates (entity, module, type_template, lang, private, fk_user, datec, label, position, enabled, active, topic, content, content_lines, joinfiles)
+SELECT 0, 'dolitmd', 'dolitmd_tmd', '', 0, null, null, '(TmdMailMessageTemplate)', 15, "isModEnabled('dolitmd')", 1,
+       'Re: __TMD_SUBJECT__ [__TICKET_REF__]',
+       '<p>Bonjour,</p><p>&nbsp;</p><p>Cordialement,<br>__MYCOMPANY_NAME__</p>',
+       null, 0
+FROM DUAL
+WHERE NOT EXISTS (SELECT rowid FROM llx_c_email_templates WHERE type_template = 'dolitmd_tmd' AND label = '(TmdMailMessageTemplate)');
+
 INSERT INTO llx_c_email_templates (entity, module, type_template, lang, private, fk_user, datec, label, position, enabled, active, topic, content, content_lines, joinfiles)
 SELECT 0, 'dolitmd', 'dolitmd_tmd', '', 0, null, null, '(TmdMailDoneTemplate)', 20, "isModEnabled('dolitmd')", 1,
        'Re: __TMD_SUBJECT__ [__TICKET_REF__] - demande traitée',

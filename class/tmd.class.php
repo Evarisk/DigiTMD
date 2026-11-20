@@ -692,7 +692,7 @@ class Tmd extends SaturneObject
 
         $result = parent::update($user, $noTrigger);
         // Done now, or pending again: the ticket follows (closed as solved, opened again). Never a mail: the mail
-        // « request done » leaves from the button of the card only (TmdMailer::sendDoneMail()), once read again
+        // « request done » leaves from the button of the card only (TmdMailer::sendCardMail()), once read again
         if ($result > 0 && is_object($before) && (int) $before->done !== (int) $this->done) {
             $this->syncTicket($user);
         }

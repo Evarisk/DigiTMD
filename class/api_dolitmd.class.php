@@ -18,7 +18,8 @@
 /**
  * \file    class/api_dolitmd.class.php
  * \ingroup dolitmd
- * \brief   REST API of DoliTMD: the TMD requests (list, read, create, change, state, mail « request done », delete)
+ * \brief   REST API of DoliTMD: the TMD requests (list, read, create, change, state, message to the customer, mail
+ *          « request done », delete)
  */
 
 use Luracast\Restler\RestException;
@@ -27,7 +28,8 @@ require_once __DIR__ . '/tmd.class.php';
 
 /**
  * API of the TMD requests, at /api/index.php/dolitmd. Every change goes through the same methods as the pages: the
- * ticket of the request follows its state, the mail « request done » goes to the sender and the people in copy.
+ * ticket of the request follows its state, the messages and the mail « request done » go to the sender and the people
+ * in copy.
  *
  * @access protected
  * @class  DolibarrApiAccess {@requires user,external}
@@ -315,13 +317,67 @@ class Dolitmd extends DolibarrApi
      */
     public function postSendDone(int $id, string $to = '', string $cc = '', string $subject = '', string $message = '', $files = null): array
     {
+        return $this->sendCardMail('done', $id, $to, $cc, $subject, $message, $files);
+    }
+
+    /**
+     * Send a message to the customer of a TMD request, its state kept
+     *
+     * As the button « Send a message » of the card, while the request is being done (a question, a piece missing...): to
+     * the sender, in copy the people in To or in copy of the mail of the request and the contacts of its ticket; in the
+     * conversation of the mail of the request, written in the messages of its ticket. The subject comes from the template
+     * « message to the customer »; no document attached unless named.
+     *
+     * Example: { "message": "Hello, could you send us the safety data sheet of the product?" }
+     *
+     * @param  int    $id      ID of the request
+     * @param  string $message Message, HTML or text: the whole text of the mail
+     * @param  string $to      Recipients, separated by commas (default: the sender)
+     * @param  string $cc      Copies, separated by commas (default: the people in copy and the contacts of the ticket)
+     * @param  string $subject Subject (default: from the template)
+     * @param  array  $files   Names of documents of the request to attach (default: none)
+     * @return array           Recipients, documents attached, state of the request
+     *
+     * @url POST {id}/sendmessage
+     *
+     * @throws RestException 400 Bad request
+     * @throws RestException 403 Forbidden
+     * @throws RestException 404 Not found
+     * @throws RestException 500 Mail not sent
+     */
+    public function postSendMessage(int $id, string $message, string $to = '', string $cc = '', string $subject = '', $files = null): array
+    {
+        return $this->sendCardMail('message', $id, $to, $cc, $subject, $message, $files);
+    }
+
+    /**
+     * Send a mail of the card to the customer of a request: what is not given is taken from the draft of the card
+     *
+     * @param  string     $mail    done (then the request is done) or message (its state kept)
+     * @param  int        $id      ID of the request
+     * @param  string     $to      Recipients, separated by commas
+     * @param  string     $cc      Copies, separated by commas
+     * @param  string     $subject Subject
+     * @param  string     $message Message, HTML or text
+     * @param  array|null $files   Names of documents of the request to attach
+     * @return array               Recipients, documents attached, state of the request
+     *
+     * @throws RestException
+     */
+    private function sendCardMail(string $mail, int $id, string $to, string $cc, string $subject, string $message, $files): array
+    {
         $this->checkRight('write');
         $this->fetchTmd($id);
         require_once __DIR__ . '/tmdmailer.class.php';
 
+        // The template of a message is the greetings only: the text is always given
+        if ($mail == 'message' && trim(dol_string_nohtmltag($message)) === '') {
+            throw new RestException(400, 'Message needed');
+        }
+
         $mailer = new TmdMailer($this->db);
-        $draft  = $this->quietly(function () use ($mailer) {
-            return $mailer->doneDraft($this->tmd);
+        $draft  = $this->quietly(function () use ($mailer, $mail) {
+            return $mailer->cardDraft($this->tmd, $mail);
         });
         $bad    = [];
         $toList = TmdMailer::parseAddresses($to !== '' ? $to : $draft['to'], $bad);
@@ -338,22 +394,22 @@ class Dolitmd extends DolibarrApi
         }
         $subject = $subject !== '' ? $subject : $draft['subject'];
         if (trim($subject) === '' || trim(dol_string_nohtmltag($html)) === '') {
-            throw new RestException(400, 'Subject and message needed: the template « request done » is missing, give them');
+            throw new RestException(400, 'Subject and message needed: the template of the mail is missing, give them');
         }
-        $names = is_array($files) ? array_map('strval', $files) : array_column($draft['files'], 'name');
+        $names = is_array($files) ? array_map('strval', $files) : $draft['attach'];
         $known = array_column($this->tmd->getPublicFiles(), 'name');
         if (array_diff($names, $known)) {
             throw new RestException(400, 'Unknown document(s): ' . implode(', ', array_diff($names, $known)));
         }
 
-        $sent = $this->quietly(function () use ($mailer, $toList, $ccList, $subject, $html, $names) {
-            return $mailer->sendDoneMail($this->tmd, DolibarrApiAccess::$user, $toList, $ccList, trim($subject), $html, $names);
+        $sent = $this->quietly(function () use ($mailer, $mail, $toList, $ccList, $subject, $html, $names) {
+            return $mailer->sendCardMail($mail, $this->tmd, DolibarrApiAccess::$user, $toList, $ccList, trim($subject), $html, $names);
         });
         if (!$sent) {
             throw new RestException(500, 'Mail not sent: ' . $mailer->error);
         }
-        // Sent: the request is done
-        if (empty($this->tmd->done)) {
+        // « Request done » sent: the request is done; a message leaves the state as it is
+        if ($mail == 'done' && empty($this->tmd->done)) {
             $this->quietly(function () {
                 return $this->tmd->setFlag(DolibarrApiAccess::$user, 'done', 1);
             });
