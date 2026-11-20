@@ -640,3 +640,53 @@ body#mainbody .dolitmd-sender-create {
     }
   }
 }
+
+// Card: cover shown while files are dragged over it, dropped anywhere they go to the tab Documents (tmd.js). It lets
+// the drag events through to the page, whose handlers sit on the document; it stays while the files are sent
+.dolitmd-dropzone {
+  position: fixed;
+  inset: 12px;
+  z-index: 1010;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: 3px dashed var(--saturne-primary, #2563eb);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .92);
+  pointer-events: none;
+
+  &.dolitmd-dropzone--visible,
+  &.dolitmd-dropzone--sending {
+    display: flex;
+  }
+
+  // Sending: the page waits for the files, then it is read again
+  &.dolitmd-dropzone--sending {
+    pointer-events: auto;
+    cursor: progress;
+  }
+}
+
+.dolitmd-dropzone-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 560px;
+  padding: 0 20px;
+  text-align: center;
+  color: var(--saturne-primary, #2563eb);
+}
+
+.dolitmd-dropzone-icon {
+  font-size: 3.2em;
+}
+
+.dolitmd-dropzone-title {
+  font-size: 1.3em;
+  font-weight: 600;
+}
+
+.dolitmd-dropzone-help {
+  color: var(--saturne-muted, #64748b);
+}
