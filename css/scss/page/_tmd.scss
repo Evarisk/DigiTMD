@@ -520,8 +520,11 @@ body#mainbody .dolitmd-sender-create {
     color: #fff;
   }
 
-  // Answers quoting the whole thread: the text scrolls, the mail of the request is shown in full
+  // Answers quoting the whole thread: the text scrolls, the mail of the request is shown in full.
+  // The date floats on the right a few pixels below the title, and a box that scrolls never goes under a float: it
+  // shrank by the width of the date, so it starts below it
   .timeline > li:not(.timeline-code-dolitmd_request) > .timeline-item > .timeline-body {
+    clear: both;
     max-height: 320px;
     overflow-y: auto;
   }
