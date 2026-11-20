@@ -180,7 +180,7 @@ $size = static function (int $bytes) use ($langs): string {
                                 <span class="dolitmd-public__file-name"><?php echo dol_escape_htmltag($file['name']); ?></span>
                                 <span class="dolitmd-public__file-meta"><?php echo $size($file['size']) . ' · ' . $date($file['date'], 'day'); ?></span>
                             </span>
-                            <a class="dolitmd-public__button dolitmd-public__button--light" href="<?php echo dol_escape_htmltag($fileUrl); ?>" target="_blank" rel="noopener">
+                            <a class="dolitmd-public__button dolitmd-public__button--light" href="<?php echo dol_escape_htmltag($fileUrl); ?>" download="<?php echo dol_escape_htmltag($file['name']); ?>">
                                 <i class="fas fa-download"></i><span class="dolitmd-public__button-text"><?php echo $langs->trans('Download'); ?></span>
                             </a>
                         </li>

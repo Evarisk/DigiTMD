@@ -82,8 +82,8 @@ télécharger. Tous les fichiers de l'onglet Documents y sont visibles (l'onglet
 - La page s'ouvre avec le **numéro de suivi** de la demande (`XXXX-XXXX-XXXX-XXXX`, 16 caractères tirés au hasard) :
   lien direct dans les mails automatiques, ou numéro saisi sur la page (`public/tmd/tracking.php?entity=1`).
   Un numéro inconnu ne dit rien de plus qu'« aucune demande ».
-- Les documents ne sont servis qu'avec ce numéro, et seulement ceux de la demande ; PDF et images s'ouvrent dans le
-  navigateur, les autres fichiers se téléchargent.
+- Les documents ne sont servis qu'avec ce numéro, et seulement ceux de la demande. Le bouton « Télécharger » les
+  télécharge tous, PDF et images compris : la visionneuse du navigateur n'entre pas en jeu.
 - Sur la fiche : le numéro, le lien de la page (à copier) et le bouton « Page de suivi ». L'ID nomeref n'y
   apparaît jamais.
 
