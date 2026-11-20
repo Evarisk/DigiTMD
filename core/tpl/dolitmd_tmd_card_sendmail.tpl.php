@@ -16,25 +16,28 @@
  */
 
 /**
- * \file    core/tpl/dolitmd_tmd_card_senddone.tpl.php
+ * \file    core/tpl/dolitmd_tmd_card_sendmail.tpl.php
  * \ingroup dolitmd
- * \brief   Form of the mail « request done » under the card of a TMD request: recipients, copies, subject, message and
- *          documents read again before sending (action senddone of view/tmd/tmd_card.php)
+ * \brief   Form of a mail to the customer under the card of a TMD request, a message while the request is being done or
+ *          « request done »: recipients, copies, subject, message and documents read again before sending (actions
+ *          sendmessage and senddone of view/tmd/tmd_card.php)
  *
  * Rendered by core/tpl/dolitmd_tmd_card_view.tpl.php (inherits its scope).
- * Expects: $object, $langs, $mailer (TmdMailer), $doneForm (to, cc, subject, html, files)
+ * Expects: $object, $langs, $mailer (TmdMailer), $mailForm (mail: message or done, to, cc, subject, html, files)
  */
 
 require_once DOL_DOCUMENT_ROOT . '/core/class/doleditor.class.php';
 
 $langs->load('mails');
 
-print '<div id="dolitmd-senddone" class="dolitmd-senddone">';
-print load_fiche_titre($langs->trans('TmdSendDoneTitle'), '', 'fa-paper-plane');
+$isDone = $mailForm['mail'] == 'done';
 
-print '<form method="POST" action="' . dol_escape_htmltag($_SERVER['PHP_SELF'] . '?id=' . $object->id) . '#dolitmd-senddone">';
+print '<div id="dolitmd-sendmail" class="dolitmd-sendmail">';
+print load_fiche_titre($langs->trans($isDone ? 'TmdSendDoneTitle' : 'TmdSendMessageTitle'), '', $isDone ? 'fa-paper-plane' : 'fa-reply');
+
+print '<form method="POST" action="' . dol_escape_htmltag($_SERVER['PHP_SELF'] . '?id=' . $object->id) . '#dolitmd-sendmail">';
 print '<input type="hidden" name="token" value="' . newToken() . '">';
-print '<input type="hidden" name="action" value="senddone">';
+print '<input type="hidden" name="action" value="' . ($isDone ? 'senddone' : 'sendmessage') . '">';
 print '<input type="hidden" name="id" value="' . ((int) $object->id) . '">';
 
 print '<table class="border centpercent">';
@@ -42,27 +45,27 @@ print '<table class="border centpercent">';
 print '<tr><td class="titlefieldcreate">' . $langs->trans('MailFrom') . '</td><td>' . dol_escape_htmltag($mailer->senderAddress()) . '</td></tr>';
 
 print '<tr><td class="fieldrequired">' . $langs->trans('MailTo') . '</td><td>';
-print '<input type="text" name="sendto" class="quatrevingtpercent" value="' . dol_escape_htmltag((string) $doneForm['to']) . '">';
+print '<input type="text" name="sendto" class="quatrevingtpercent" value="' . dol_escape_htmltag((string) $mailForm['to']) . '">';
 print '</td></tr>';
 
 print '<tr><td>' . $form->textwithpicto($langs->trans('MailCC'), $langs->trans('TmdSendDoneCopiesHelp')) . '</td><td>';
-print '<textarea name="sendtocc" rows="2" class="quatrevingtpercent">' . dol_escape_htmltag((string) $doneForm['cc']) . '</textarea>';
+print '<textarea name="sendtocc" rows="2" class="quatrevingtpercent">' . dol_escape_htmltag((string) $mailForm['cc']) . '</textarea>';
 print '</td></tr>';
 
 print '<tr><td class="fieldrequired">' . $langs->trans('MailTopic') . '</td><td>';
-print '<input type="text" name="subject" class="quatrevingtpercent" value="' . dol_escape_htmltag((string) $doneForm['subject']) . '">';
+print '<input type="text" name="subject" class="quatrevingtpercent" value="' . dol_escape_htmltag((string) $mailForm['subject']) . '">';
 print '</td></tr>';
 
-// The documents of the request (tab Documents), all of them attached unless unticked; the files dropped on the card
-// while the form is open are added to the list (js/modules/tmd.js)
+// The documents of the request (tab Documents): all of them ticked for « request done », none for a message; the files
+// dropped on the card while the form is open are added to the list, ticked (js/modules/tmd.js)
 print '<tr><td class="tdtop">' . $langs->trans('MailFile') . '</td><td>';
 $publicFiles = $object->getPublicFiles();
-print '<div class="dolitmd-senddone-files">';
+print '<div class="dolitmd-sendmail-files">';
 if (empty($publicFiles)) {
-    print '<span class="opacitymedium dolitmd-senddone-nofile">' . $langs->trans('TmdSendDoneNoDocument') . '</span> ';
+    print '<span class="opacitymedium dolitmd-sendmail-nofile">' . $langs->trans('TmdSendDoneNoDocument') . '</span> ';
 }
 foreach ($publicFiles as $file) {
-    print dolitmd_done_file_html($file, in_array($file['name'], (array) $doneForm['files'], true));
+    print dolitmd_done_file_html($file, in_array($file['name'], (array) $mailForm['files'], true));
 }
 print '</div>';
 print '<a class="small" href="' . dol_escape_htmltag(dol_buildpath('/saturne/view/saturne_document.php', 1) . '?id=' . $object->id . '&module_name=DoliTMD&object_type=tmd') . '">' . img_picto('', 'file', 'class="pictofixedwidth"') . $langs->trans('TmdSendDoneAddDocument') . '</a>';
@@ -70,7 +73,7 @@ print '</td></tr>';
 
 // The message: the editor of Dolibarr when there is one, else the text with its links written out
 print '<tr><td class="tdtop fieldrequired">' . $langs->trans('MailText') . '</td><td>';
-$messageHtml = (string) $doneForm['html'];
+$messageHtml = (string) $mailForm['html'];
 if (isModEnabled('fckeditor')) {
     $editor = new DolEditor('message', $messageHtml, '', 280, 'dolibarr_mailings', 'In', true, true, true, ROWS_8, '80%');
     $editor->Create();
@@ -85,7 +88,9 @@ print '</td></tr>';
 print '</table>';
 
 print '<div class="center">';
-if (empty($object->done)) {
+if (!$isDone) {
+    print '<div class="opacitymedium marginbottomonly">' . $langs->trans('TmdSendMessageKeepsState') . '</div>';
+} elseif (empty($object->done)) {
     print '<div class="opacitymedium marginbottomonly">' . $langs->trans('TmdSendDoneSetsDone') . '</div>';
 }
 print '<input type="submit" class="button button-save" value="' . dol_escape_htmltag($langs->trans('TmdSendDoneButton')) . '">';

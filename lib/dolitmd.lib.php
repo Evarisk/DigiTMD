@@ -381,7 +381,7 @@ function dolitmd_document_line_html(Tmd $object, array $file, bool $canDelete): 
 }
 
 /**
- * A document of the request in the mail « request done »: ticked to go as an attachment (form of the card, and the
+ * A document of the request in a mail to the customer: ticked to go as an attachment (form of the card, and the
  * files dropped on the card while the form is open)
  *
  * @param  array{name:string,size:int} $file    Document of the tab Documents (Tmd::getPublicFiles())

@@ -103,38 +103,41 @@ if (empty($resHook)) {
     $backurlforlist = $listUrl;
     $triggermodname = 'TMD_MODIFY';
 
-    // Mail « request done », read again on the card then sent: to the sender and the people in copy of his mail, the
-    // documents of the request attached; the request is done once it is sent
-    $doneForm = null;
-    if (in_array($action, ['presenddone', 'senddone'], true) && $permissiontoadd && $object->id > 0) {
+    // Mails of the card, read again then sent to the sender and the people in copy of his mail: a message while the
+    // request is being done (its state kept), or « request done » with the documents of the request attached (the
+    // request is done once it is sent)
+    $mailForm  = null;
+    $cardMails = ['presendmessage' => 'message', 'sendmessage' => 'message', 'presenddone' => 'done', 'senddone' => 'done'];
+    if (isset($cardMails[$action]) && $permissiontoadd && $object->id > 0) {
         require_once __DIR__ . '/../../class/tmdmailer.class.php';
         $mailer = new TmdMailer($db);
-        if ($action == 'presenddone') {
-            $draft    = $mailer->doneDraft($object);
-            $doneForm = ['to' => $draft['to'], 'cc' => implode(', ', array_column($draft['cc'], 'email')), 'subject' => $draft['subject'], 'html' => $draft['html'], 'files' => array_column($draft['files'], 'name')];
+        $mail   = $cardMails[$action];
+        if (strpos($action, 'presend') === 0) {
+            $draft    = $mailer->cardDraft($object, $mail);
+            $mailForm = ['mail' => $mail, 'to' => $draft['to'], 'cc' => implode(', ', array_column($draft['cc'], 'email')), 'subject' => $draft['subject'], 'html' => $draft['html'], 'files' => $draft['attach']];
         } else {
             // Addresses with their names (« Name <a@b.c> »): read as typed, each one checked by parseAddresses()
-            $doneForm = ['to' => GETPOST('sendto', 'none'), 'cc' => GETPOST('sendtocc', 'none'), 'subject' => GETPOST('subject', 'alphanohtml'), 'html' => GETPOST('message', 'restricthtml'), 'files' => GETPOST('files', 'array')];
+            $mailForm = ['mail' => $mail, 'to' => GETPOST('sendto', 'none'), 'cc' => GETPOST('sendtocc', 'none'), 'subject' => GETPOST('subject', 'alphanohtml'), 'html' => GETPOST('message', 'restricthtml'), 'files' => GETPOST('files', 'array')];
             $bad      = [];
-            $to       = TmdMailer::parseAddresses((string) $doneForm['to'], $bad);
-            $cc       = TmdMailer::parseAddresses((string) $doneForm['cc'], $bad);
-            $html     = dol_textishtml($doneForm['html']) ? $doneForm['html'] : dol_nl2br(dol_escape_htmltag($doneForm['html']));
+            $to       = TmdMailer::parseAddresses((string) $mailForm['to'], $bad);
+            $cc       = TmdMailer::parseAddresses((string) $mailForm['cc'], $bad);
+            $html     = dol_textishtml($mailForm['html']) ? $mailForm['html'] : dol_nl2br(dol_escape_htmltag($mailForm['html']));
             $error    = '';
             if (empty($to)) {
                 $error = $langs->trans('ErrorFieldRequired', $langs->transnoentities('MailTo'));
             } elseif (!empty($bad)) {
                 $error = $langs->trans('TmdMailBadAddresses', implode(', ', $bad));
-            } elseif (trim($doneForm['subject']) === '') {
+            } elseif (trim($mailForm['subject']) === '') {
                 $error = $langs->trans('ErrorFieldRequired', $langs->transnoentities('MailTopic'));
             } elseif (trim(dol_string_nohtmltag($html)) === '') {
                 $error = $langs->trans('ErrorFieldRequired', $langs->transnoentities('MailText'));
-            } elseif (!$mailer->sendDoneMail($object, $user, $to, $cc, trim($doneForm['subject']), $html, array_map('strval', (array) $doneForm['files']))) {
+            } elseif (!$mailer->sendCardMail($mail, $object, $user, $to, $cc, trim($mailForm['subject']), $html, array_map('strval', (array) $mailForm['files']))) {
                 $error = $langs->trans('TmdMailNotSent', $mailer->error);
             }
 
             if ($error === '') {
-                // Sent: the request is done (the ticket closed)
-                if (empty($object->done)) {
+                // « Request done » sent: the request is done (the ticket closed); a message leaves the state as it is
+                if ($mail == 'done' && empty($object->done)) {
                     // Closing the ticket prints warnings of the core 24 (Ticket::listeContact): never before the redirect
                     ob_start();
                     $result = $object->setFlag($user, 'done', 1);
@@ -143,12 +146,12 @@ if (empty($resHook)) {
                         setEventMessages($object->error, $object->errors, 'warnings');
                     }
                 }
-                setEventMessages($langs->trans('TmdMailDoneSentOk', implode(', ', array_column(array_merge($to, $cc), 'email'))), null);
+                setEventMessages($langs->trans(TmdMailer::CARD_MAILS[$mail] . 'Ok', implode(', ', array_column(array_merge($to, $cc), 'email'))), null);
                 header('Location: ' . $_SERVER['PHP_SELF'] . '?id=' . $object->id);
                 exit;
             }
             setEventMessages($error, null, 'errors');
-            $action = 'presenddone';
+            $action = 'presend' . $mail;
         }
     }
 

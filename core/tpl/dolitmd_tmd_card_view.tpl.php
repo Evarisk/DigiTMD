@@ -105,15 +105,17 @@ if (empty($resHook)) {
     if ($publicUrl !== '') {
         print dolGetButtonAction('<i class="fas fa-globe pictofixedwidth"></i>' . $langs->trans('TmdPublicPage'), '', 'default', $publicUrl, '', 1, ['attr' => ['target' => '_blank', 'rel' => 'noopener']]);
     }
-    print dolGetButtonAction('<i class="fas fa-paper-plane pictofixedwidth"></i>' . $langs->trans('TmdSendDone'), '', 'default', $_SERVER['PHP_SELF'] . '?id=' . $object->id . '&action=presenddone&token=' . newToken() . '#dolitmd-senddone', '', $permissiontoadd);
+    // A message to the customer while the request is being done (a question, a piece missing...): the state is kept
+    print dolGetButtonAction('<i class="fas fa-reply pictofixedwidth"></i>' . $langs->trans('TmdSendMessage'), '', 'default', $_SERVER['PHP_SELF'] . '?id=' . $object->id . '&action=presendmessage&token=' . newToken() . '#dolitmd-sendmail', '', $permissiontoadd);
+    print dolGetButtonAction('<i class="fas fa-paper-plane pictofixedwidth"></i>' . $langs->trans('TmdSendDone'), '', 'default', $_SERVER['PHP_SELF'] . '?id=' . $object->id . '&action=presenddone&token=' . newToken() . '#dolitmd-sendmail', '', $permissiontoadd);
     print dolGetButtonAction('<i class="fas fa-edit pictofixedwidth"></i>' . $langs->trans('Modify'), '', 'default', $_SERVER['PHP_SELF'] . '?id=' . $object->id . '&action=edit&token=' . newToken(), '', $permissiontoadd);
     print dolGetButtonAction('<i class="fas fa-trash pictofixedwidth"></i>' . $langs->trans('Delete'), '', 'delete', $_SERVER['PHP_SELF'] . '?id=' . $object->id . '&action=delete&token=' . newToken(), '', $permissiontodelete);
 }
 print '</div>';
 
-// Mail « request done », read again before sending it
-if ($action == 'presenddone' && !empty($doneForm) && $permissiontoadd) {
-    include __DIR__ . '/dolitmd_tmd_card_senddone.tpl.php';
+// Mail to the customer (a message, or « request done »), read again before sending it
+if (in_array($action, ['presendmessage', 'presenddone'], true) && !empty($mailForm) && $permissiontoadd) {
+    include __DIR__ . '/dolitmd_tmd_card_sendmail.tpl.php';
 }
 
 // Unknown sender: the modal of the button « + » of its address

@@ -138,7 +138,7 @@ if ($action == 'upload_files') {
         }
     }
 
-    // Card reloaded: the messages of the upload stay for it. Mail « request done » open (inline), the card stays: they
+    // Card reloaded: the messages of the upload stay for it. Mail to the customer open (inline), the card stays: they
     // are given here, with the lines of the files to attach
     $events = [];
     if (GETPOSTINT('inline')) {

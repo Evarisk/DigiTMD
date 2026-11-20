@@ -19,14 +19,14 @@
  * \file    core/tpl/dolitmd_tmd_card_dropzone.tpl.php
  * \ingroup dolitmd
  * \brief   Cover of the card of a TMD request while files are dragged over it: dropped anywhere, they go to the tab
- *          Documents (js/modules/tmd.js, action upload_files of ajax/tmd.php); with the mail « request done » open, they
- *          are attached to it too
+ *          Documents (js/modules/tmd.js, action upload_files of ajax/tmd.php); with a mail to the customer open (a
+ *          message or « request done »), they are attached to it too
  *
  * Rendered by core/tpl/dolitmd_tmd_card_view.tpl.php (inherits its scope).
  * Expects: $object, $langs, $action, $publicUrl, $dropZone (maxSize in bytes, 0 = no limit; cardUrl)
  */
 
-$dropTitle = $langs->trans($action == 'presenddone' ? 'TmdDropTitleMail' : 'TmdDropTitle', $object->ref);
+$dropTitle = $langs->trans(in_array($action, ['presendmessage', 'presenddone'], true) ? 'TmdDropTitleMail' : 'TmdDropTitle', $object->ref);
 
 print '<div class="dolitmd-dropzone" aria-hidden="true"';
 print ' data-url="' . dol_escape_htmltag(dol_buildpath('/dolitmd/ajax/tmd.php', 1)) . '"';
