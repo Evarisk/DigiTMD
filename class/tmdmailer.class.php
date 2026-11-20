@@ -33,8 +33,9 @@ require_once __DIR__ . '/tmd.class.php';
  * Class TmdMailer
  *
  * Each mail is written from its template (Setup > Emails > Templates, type « TMD requests »). The receipt and the
- * reminder of the late requests are automatic, off until switched on in the setup; the mail « request done » is never
- * automatic: it leaves from the button of the card (or the API), once read again. Sent by the server of the TMD
+ * reminder of the late requests are automatic, off until switched on in the setup; the mail « request done » and the
+ * messages to the customer while the request is being done are never automatic: they leave from the buttons of the card
+ * (or the API), once read again. Sent by the server of the TMD
  * mailbox (module Inbox) when there is one: the sender sees the TMD address, his answer comes back in the same
  * conversation (In-Reply-To). Else by the mail setup of Dolibarr. The nomeref ID is internal: never offered to the
  * templates.
@@ -47,13 +48,22 @@ class TmdMailer
     public const TEMPLATE_TYPE = 'dolitmd_tmd';
 
     /**
-     * The mails: constant switching on the automatic ones (none for « request done », sent by hand), label of their
-     * template
+     * The mails: constant switching on the automatic ones (none for « request done » and the messages, sent by hand),
+     * label of their template
      */
     public const MAILS = [
-        'ack'  => ['const' => 'DOLITMD_MAIL_ACK', 'template' => '(TmdMailAckTemplate)'],
-        'done' => ['const' => '', 'template' => '(TmdMailDoneTemplate)'],
-        'late' => ['const' => 'DOLITMD_MAIL_LATE', 'template' => '(TmdMailLateTemplate)'],
+        'ack'     => ['const' => 'DOLITMD_MAIL_ACK', 'template' => '(TmdMailAckTemplate)'],
+        'message' => ['const' => '', 'template' => '(TmdMailMessageTemplate)'],
+        'done'    => ['const' => '', 'template' => '(TmdMailDoneTemplate)'],
+        'late'    => ['const' => 'DOLITMD_MAIL_LATE', 'template' => '(TmdMailLateTemplate)'],
+    ];
+
+    /**
+     * The mails written on the card to the customer of a request: ticket message written once sent
+     */
+    public const CARD_MAILS = [
+        'message' => 'TmdMailMessageSent',
+        'done'    => 'TmdMailDoneSent',
     ];
 
     /**
@@ -94,38 +104,47 @@ class TmdMailer
     }
 
     /**
-     * Mail « request done » to read again before sending it: to the sender, in copy the people in copy of his mail, the
-     * template filled, the documents of the request
+     * Mail of the card to read again before sending it (« request done », or a message while the request is being done):
+     * to the sender, in copy the people in copy of his mail, the template filled, the documents of the request (all of
+     * them attached for « request done », none for a message)
      *
-     * @param  Tmd $tmd TMD request
-     * @return array{to:string,cc:array<int,array{email:string,name:string}>,subject:string,html:string,files:array<int,array{name:string,size:int,date:int,fullname:string}>}
+     * @param  Tmd    $tmd  TMD request
+     * @param  string $mail done or message (CARD_MAILS)
+     * @return array{to:string,cc:array<int,array{email:string,name:string}>,subject:string,html:string,files:array<int,array{name:string,size:int,date:int,fullname:string}>,attach:string[]}
      */
-    public function doneDraft(Tmd $tmd): array
+    public function cardDraft(Tmd $tmd, string $mail): array
     {
         global $langs;
 
         $langs->load('dolitmd@dolitmd');
-        $template = $this->template('done');
+        $ticket   = $this->ticketOf($tmd);
+        $template = $this->template($mail);
         if ($template !== null) {
-            [$subject, $html] = $this->compose($template, $this->substitutions($tmd, $this->ticketOf($tmd)));
+            [$subject, $html] = $this->compose($template, $this->substitutions($tmd, $ticket));
         } else {
-            [$subject, $html] = ['Re: ' . $tmd->label, ''];
+            // Template missing (module not activated again since it came): the subject of the conversation, the
+            // reference of the ticket (else of the request) kept for the answer
+            [$subject, $html] = ['Re: ' . $tmd->label . ' [' . ($ticket ? $ticket->ref : $tmd->ref) . ']', ''];
         }
         require_once __DIR__ . '/tmdmailhandler.class.php';
+        $files = $tmd->getPublicFiles();
 
         return [
             'to'      => (string) $tmd->email_from,
             'cc'      => (new TmdMailHandler($this->db))->requestCopies($tmd),
             'subject' => $subject,
             'html'    => $html,
-            'files'   => $tmd->getPublicFiles(),
+            'files'   => $files,
+            'attach'  => $mail == 'done' ? array_column($files, 'name') : [],
         ];
     }
 
     /**
-     * Send the mail « request done » in the conversation of the mail of the request, the documents chosen attached,
-     * and write it in the messages of the ticket
+     * Send a mail of the card (« request done », or a message while the request is being done) in the conversation of
+     * the mail of the request, the documents chosen attached, and write it in the messages of the ticket. The state of
+     * the request is not changed here
      *
+     * @param  string                                    $mail    done or message (CARD_MAILS)
      * @param  Tmd                                       $tmd     TMD request
      * @param  User                                      $user    User sending
      * @param  array<int,array{email:string,name:string}> $to      Recipients
@@ -135,12 +154,16 @@ class TmdMailer
      * @param  string[]                                  $files   Names of documents of the request (tab Documents)
      * @return bool                                               Sent
      */
-    public function sendDoneMail(Tmd $tmd, User $user, array $to, array $cc, string $subject, string $html, array $files): bool
+    public function sendCardMail(string $mail, Tmd $tmd, User $user, array $to, array $cc, string $subject, string $html, array $files): bool
     {
         global $langs;
 
         $langs->load('dolitmd@dolitmd');
         $this->error = '';
+        if (!isset(self::CARD_MAILS[$mail])) {
+            $this->error = 'Unknown mail ' . $mail;
+            return false;
+        }
         if (empty($to)) {
             $this->error = $langs->transnoentities('ErrorFieldRequired', $langs->transnoentities('MailTo'));
             return false;
@@ -186,7 +209,7 @@ class TmdMailer
             $ticket->message = $this->text($html) . ($names ? "\n\n" . $langs->transnoentities('TmdMailAttachments', implode(', ', $names)) : '');
             $ticket->private = 0;
             $recipients      = dol_trunc(implode(', ', array_column(array_merge($to, $cc), 'email')), 180, 'right', 'UTF-8', 1);
-            $ticket->createTicketMessage($user, 1, [], [], [], true, 0, $langs->transnoentities('TmdMailDoneSent', $recipients));
+            $ticket->createTicketMessage($user, 1, [], [], [], true, 0, $langs->transnoentities(self::CARD_MAILS[$mail], $recipients));
         }
 
         return true;
@@ -336,7 +359,7 @@ class TmdMailer
     /**
      * Template of a mail, in the entity first
      *
-     * @param  string     $mail ack, done or late
+     * @param  string     $mail ack, message, done or late
      * @return array|null       [topic, content], null when missing or disabled
      */
     public function template(string $mail): ?array
@@ -377,7 +400,9 @@ class TmdMailer
             '__TMD_SUBJECT__'       => (string) $tmd->label,
             '__TMD_DATE_RECEIVED__' => $date($tmd->date_mail, 'dayhour'),
             '__TMD_DATE_DUE__'      => $date($tmd->date_due, 'day'),
-            '__TICKET_REF__'        => $ticket ? (string) $ticket->ref : '',
+            // A request without ticket (made by hand): its own reference, which brings the answer back to it too
+            // (TmdMailHandler::findParentRequest())
+            '__TICKET_REF__'        => $ticket ? (string) $ticket->ref : (string) $tmd->ref,
             '__THIRDPARTY_NAME__'   => $thirdparty,
             '__SENDER_EMAIL__'      => (string) $tmd->email_from,
             // Public page of the request: where it stands, its documents

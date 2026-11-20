@@ -618,7 +618,7 @@ class TmdMailHandler
     }
 
     /**
-     * People the mail « request done » goes to in copy: the recipients and copies of the mail of the request, then the
+     * People the mails of the card go to in copy: the recipients and copies of the mail of the request, then the
      * external contacts of its ticket (come with an answer or added by hand), but the TMD mailbox and the sender
      *
      * @param  Tmd $tmd TMD request
