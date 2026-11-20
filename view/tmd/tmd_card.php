@@ -154,6 +154,16 @@ if (empty($resHook)) {
     require_once DOL_DOCUMENT_ROOT . '/core/actions_addupdatedelete.inc.php';
 }
 
+// Files dropped anywhere on the card: added to the tab Documents (ajax/tmd.php), as its button « Send file » does.
+// Their total size is checked before sending: over post_max_size, PHP would drop the whole POST, token included
+$dropZone = null;
+if ($object->id > 0 && $permissiontoadd && getDolGlobalString('MAIN_UPLOAD_DOC')) {
+    $dropZone = [
+        'maxSize' => max(0, (int) getMaxFileSizeArray()['maxmin']) * 1024,
+        'cardUrl' => $_SERVER['PHP_SELF'] . '?id=' . $object->id,
+    ];
+}
+
 /*
  * View
  */

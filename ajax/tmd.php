@@ -18,7 +18,8 @@
 /**
  * \file    ajax/tmd.php
  * \ingroup dolitmd
- * \brief   Ticks done and invoiced of a TMD request, saved from the list or the card (js/modules/tmd.js)
+ * \brief   Ticks done and invoiced of a TMD request, saved from the list or the card (js/modules/tmd.js); thirdparty of
+ *          its sender; files dropped on its card
  */
 
 if (!defined('NOTOKENRENEWAL')) {
@@ -82,7 +83,7 @@ function dolitmd_ajax_reply(int $httpCode, array $data): void
 
 // Writing only: a POST (the token is checked by main.inc.php), by a user allowed to modify the TMD requests
 $action = GETPOST('action', 'aZ09');
-if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !in_array($action, ['set_flag', 'set_state', 'create_thirdparty'], true)) {
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !in_array($action, ['set_flag', 'set_state', 'create_thirdparty', 'upload_files'], true)) {
     dolitmd_ajax_reply(400, ['success' => false, 'error' => 'BadRequest']);
 }
 if (!empty($user->socid) || !$user->hasRight('dolitmd', 'tmd', 'write')) {
@@ -113,6 +114,44 @@ if ($id <= 0) {
 if ($refusal !== '') {
     dol_syslog('dolitmd ajax/tmd.php: request ' . $id . ' refused: ' . $refusal, LOG_WARNING);
     dolitmd_ajax_reply(404, ['success' => false, 'error' => $langs->transnoentities('ErrorRecordNotFound') . ' (' . $refusal . ')']);
+}
+
+if ($action == 'upload_files') {
+    // Files dropped on the card: saved in the tab Documents as its button « Send file » does (index of the files, so
+    // the trigger ECMFILES_CREATE takes the nomeref ID from the name)
+    require_once DOL_DOCUMENT_ROOT . '/core/lib/files.lib.php';
+
+    if (!getDolGlobalString('MAIN_UPLOAD_DOC')) {
+        dolitmd_ajax_reply(403, ['success' => false, 'error' => $langs->transnoentities('NotEnoughPermissions')]);
+    }
+    if (empty($_FILES['userfile'])) {
+        $langs->load('errors');
+        dolitmd_ajax_reply(400, ['success' => false, 'error' => $langs->transnoentities('ErrorFieldRequired', $langs->transnoentities('File'))]);
+    }
+
+    $before = array_column($object->getPublicFiles(), 'name');
+    $result = dol_add_file_process($object->getUploadDir(), 0, 1, 'userfile', '', null, '', 1, $object);
+    $added  = [];
+    foreach ($object->getPublicFiles() as $file) {
+        if (!in_array($file['name'], $before, true)) {
+            $added[] = $file;
+        }
+    }
+
+    // Card reloaded: the messages of the upload stay for it. Mail « request done » open (inline), the card stays: they
+    // are given here, with the lines of the files to attach
+    $events = [];
+    if (GETPOSTINT('inline')) {
+        $events = (array) ($_SESSION['dol_events'] ?? []);
+        unset($_SESSION['dol_events']);
+    }
+    dolitmd_ajax_reply(200, [
+        'success' => $result > 0,
+        'events'  => $events,
+        'files'   => array_map(static function (array $file): string {
+            return dolitmd_done_file_html($file, true);
+        }, $added),
+    ]);
 }
 
 if ($action == 'create_thirdparty') {
