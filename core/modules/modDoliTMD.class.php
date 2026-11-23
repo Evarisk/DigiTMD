@@ -91,6 +91,7 @@ class modDoliTMD extends DolibarrModules
                 'elementproperties',
                 'tmdlist_saturne',
                 'emailtemplates',
+                'ticketcard',
             ],
             'moduleforexternal' => 0,
         ];

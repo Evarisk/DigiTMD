@@ -42,7 +42,7 @@ require_once __DIR__ . '/../class/tmdmailhandler.class.php';
 global $conf, $db, $langs, $user;
 
 // Load translation files required by the page
-saturne_load_langs(['admin', 'bills']);
+saturne_load_langs(['admin', 'bills', 'errors']);
 
 // Get parameters
 $action     = GETPOST('action', 'aZ09');
@@ -78,6 +78,15 @@ if ($action == 'set_config' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $assignUserIds = array_values(array_unique($assignUserIds));
     $delay     = max(0, min(365, GETPOSTINT('delay_days')));
     $productId = GETPOSTINT('invoice_product');
+    // Address(es) told of each new ticket, comma separated as the module Ticket takes them
+    $notifyTo  = implode(', ', array_filter(array_map('trim', preg_split('/[,;]/', GETPOST('notify_email', 'alphanohtml')) ?: [])));
+    foreach (array_filter(array_map('trim', explode(',', $notifyTo))) as $notifyEmail) {
+        if (!isValidEmail($notifyEmail)) {
+            setEventMessages($langs->trans('ErrorBadEMail', $notifyEmail), [], 'errors');
+            header('Location: ' . $_SERVER['PHP_SELF']);
+            exit;
+        }
+    }
 
     // A mailbox newly chosen: only the mails received from now on become requests, never its history
     if ($mailboxId > 0 && $mailboxId !== getDolGlobalInt('DOLITMD_INBOX_ACCOUNT')) {
@@ -85,6 +94,7 @@ if ($action == 'set_config' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     dolibarr_set_const($db, 'DOLITMD_INBOX_ACCOUNT', $mailboxId > 0 ? (string) $mailboxId : '', 'chaine', 0, '', $conf->entity);
     dolibarr_set_const($db, 'DOLITMD_TICKET_USER', implode(',', $assignUserIds), 'chaine', 0, '', $conf->entity);
+    dolibarr_set_const($db, 'DOLITMD_TICKET_NOTIFICATION_EMAIL_TO', $notifyTo, 'chaine', 0, '', $conf->entity);
     dolibarr_set_const($db, 'DOLITMD_DELAY_DAYS', (string) $delay, 'chaine', 0, '', $conf->entity);
     if (GETPOSTISSET('invoice_product')) {
         dolibarr_set_const($db, 'DOLITMD_INVOICE_PRODUCT', $productId > 0 ? (string) $productId : '', 'chaine', 0, '', $conf->entity);
@@ -141,6 +151,13 @@ print '</tr>';
 print '<tr class="oddeven"><td><label for="assign_user">' . $langs->trans('TmdSetupAssignUser') . '</label></td>';
 print '<td>' . $langs->trans('TmdSetupAssignUserHelp') . '</td>';
 print '<td>' . img_picto('', 'user', 'class="pictofixedwidth"') . $form->select_dolusers(TmdMailHandler::assignUserIds($db), 'assign_user', 0, null, 0, '', '', (string) $conf->entity, 0, 0, '', 0, '', 'minwidth300 maxwidth400 widthcentpercentminusx', 1, 0, true) . '</td>';
+print '</tr>';
+
+// The address of the module Ticket stays the one of the other tickets: shown, so that the choice is made knowingly
+$globalNotifyTo = getDolGlobalString('TICKET_NOTIFICATION_EMAIL_TO');
+print '<tr class="oddeven"><td><label for="notify_email">' . $langs->trans('TmdSetupNotifyEmail') . '</label></td>';
+print '<td>' . $langs->trans('TmdSetupNotifyEmailHelp', $globalNotifyTo !== '' ? $globalNotifyTo : $langs->transnoentities('TmdSetupNotifyEmailNone')) . '</td>';
+print '<td>' . img_picto('', 'email', 'class="pictofixedwidth"') . '<input type="text" class="minwidth300 maxwidth400 widthcentpercentminusx" id="notify_email" name="notify_email" value="' . dol_escape_htmltag(getDolGlobalString('DOLITMD_TICKET_NOTIFICATION_EMAIL_TO')) . '" placeholder="' . dol_escape_htmltag($globalNotifyTo) . '"></td>';
 print '</tr>';
 print '</table>';
 
