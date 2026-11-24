@@ -49,9 +49,10 @@ dans `core/triggers/` tant que le module Inbox ne l'envoie pas.
 ### Réponses du client
 
 Un mail qui répond à une demande ne crée ni demande ni ticket : il devient un message du ticket de la demande (avec
-ses pièces jointes, et le mail lié dans l'onglet Mails). Il est reconnu au Message-ID de la demande dans ses
-références, au numéro de suivi Dolibarr du ticket (mail écrit depuis le ticket), ou à la référence du ticket
-(`[TS2611-0043]`) ou de la demande dans son objet. La liste montre le nombre de réponses devant l'objet.
+ses pièces jointes, rattachées à ce message, et le mail lié dans l'onglet Mails). Il est reconnu au Message-ID de la
+demande ou d'un mail déjà rangé dans la demande (une réponse, le mail d'une demande fusionnée) dans ses références, au
+numéro de suivi Dolibarr du ticket (mail écrit depuis le ticket), ou à la référence du ticket (`[TS2611-0043]`) ou de
+la demande dans son objet. La liste montre le nombre de réponses devant l'objet.
 
 Un mail du fil d'une demande qui parle d'autre chose est une **nouvelle demande** : un client écrit souvent sa
 nouvelle demande en répondant dans Outlook à l'ancienne et en changeant l'objet. L'objet du mail doit reprendre
@@ -59,6 +60,21 @@ celui de la demande (« RE: », « TR: », « RELANCE », les balises entre croc
 autre numéro, ou citer la référence de la demande ou de son ticket : « DEMANDE DGD X1234567 PANAMA » écrit en
 réponse à « DEMANDE DGD X7654321 COLOMBIE » crée sa demande. Quand la boîte n'est qu'en copie, le mail reste un
 message du ticket du fil, quel que soit son objet.
+
+### Fusionner deux demandes, sortir un message en demande
+
+Quand le tri s'est trompé, on corrige depuis la fiche, sans mail envoyé :
+
+- **Fusionner** (action de masse de la liste) : on coche au moins deux demandes, puis on choisit celle à garder (la
+  plus ancienne est proposée). Le mail, les messages et les fichiers du ticket, les documents et les contacts du ticket
+  des autres arrivent dans la demande gardée, qui garde sa référence, son état, son échéance et son numéro de suivi ;
+  l'ID nomeref, la catégorie, le tiers et l'expéditeur qui lui manquaient sont repris des autres. Les autres demandes
+  sont supprimées et leurs tickets annulés (avec une note). Ensuite, les réponses à leurs fils, leurs fiches et leurs
+  liens de suivi mènent à la demande gardée.
+- **Nouvelle demande** (lien sur une réponse reçue du bloc « Demande du client ») : pour une nouvelle demande écrite en
+  répondant à une ancienne sans changer l'objet. Le message, ses pièces jointes et son mail (objet, expéditeur, personnes
+  en copie) deviennent une demande à part, avec son propre ticket ; l'objet proposé est celui du mail, modifiable. Les
+  réponses à ce mail vont dans la nouvelle demande ; une note privée de l'ancienne dit où il est parti.
 
 ### Délais et retards
 

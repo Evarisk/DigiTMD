@@ -152,7 +152,7 @@ class TmdMailHandler
      */
     public function handleMail(object $mailbox, int $mailId, User $user): int
     {
-        global $conf, $langs;
+        global $langs;
 
         $langs->load('dolitmd@dolitmd');
         $p         = $this->db->prefix();
@@ -204,17 +204,43 @@ class TmdMailHandler
             return 0;
         }
 
-        [$socId, $contactId]  = $this->findSender($sender);
-        $subject              = trim((string) $row->subject) !== '' ? trim((string) $row->subject) : $langs->transnoentities('TmdMailNoSubject');
+        $subject = trim((string) $row->subject) !== '' ? trim((string) $row->subject) : $langs->transnoentities('TmdMailNoSubject');
+        $tmd     = $this->createRequest($row, $message, $subject, $sender, $dateMail, $author, $mailbox);
+
+        return $tmd !== null ? (int) $tmd->id : -1;
+    }
+
+    /**
+     * Ticket and request of a mail: the ticket (assigned, linked to the thirdparty and the contact of the sender, the
+     * text and the attachments of the mail) then the request. A mail received, or a message of a thread taken out as a
+     * request of its own (TmdMerger::split(): no mail parsed, its text in the snippet of the row, no acknowledgement)
+     *
+     * @param  object            $row      Row of llx_inbox_mail (message_id, subject, snippet, to_text, cc_text...)
+     * @param  InboxMessage|null $message  Mail parsed, null: the text is the snippet of the row
+     * @param  string            $subject  Subject of the request
+     * @param  string            $sender   Address of the sender
+     * @param  int               $dateMail Date of the mail
+     * @param  User              $author   User creating
+     * @param  object|null       $mailbox  Mailbox (InboxAccount or its row): the people of the mail made contacts of the ticket
+     * @param  bool              $ack      Send the acknowledgement of the setup
+     * @return Tmd|null                    Request created, null on error
+     */
+    public function createRequest(object $row, $message, string $subject, string $sender, int $dateMail, User $author, ?object $mailbox, bool $ack = true): ?Tmd
+    {
+        global $conf;
+
+        $messageId           = trim((string) ($row->message_id ?? ''));
+        [$socId, $contactId] = $this->findSender($sender);
 
         $this->db->begin();
 
         $ticket = $this->createTicket($row, $message, $subject, $sender, $socId, $contactId, $dateMail, $author);
         if ($ticket === null) {
             $this->db->rollback();
-            return -1;
+            return null;
         }
 
+        $tmd               = new Tmd($this->db);
         $tmd->label        = dol_trunc($subject, 255, 'right', 'UTF-8', 1);
         // ADR, IATA or IMDG: named by the subject, else by the text of the mail
         $tmd->category     = Tmd::categoryFromMail($subject, (string) $ticket->message);
@@ -228,21 +254,30 @@ class TmdMailHandler
         if ($tmd->create($author) <= 0) {
             $this->error  = $tmd->error;
             $this->errors = array_merge($this->errors, $tmd->errors);
-            dol_syslog(__METHOD__ . ' request of mail ' . $mailId . ' not created: ' . $tmd->error . ' ' . implode(', ', $tmd->errors), LOG_ERR);
+            dol_syslog(__METHOD__ . ' request of mail ' . ((int) ($row->rowid ?? 0)) . ' not created: ' . $tmd->error . ' ' . implode(', ', $tmd->errors), LOG_ERR);
             $this->db->rollback();
-            return -1;
+            return null;
         }
 
         $this->db->commit();
 
+        // Read again: right after its creation, its reference in memory is still the provisional one
+        $tmd->fetch($tmd->id);
+
         // Out of the transaction: a failure here keeps the ticket and the request
         $this->saveAttachments($ticket, $message);
-        $this->linkMail($row, $ticket);
-        $this->addCopiedContacts($ticket, $row, $message, $mailbox, $author);
-        require_once __DIR__ . '/tmdmailer.class.php';
-        (new TmdMailer($this->db))->sendAck($tmd, $author);
+        if ((int) ($row->rowid ?? 0) > 0) {
+            $this->linkMail($row, $ticket);
+            if ($mailbox !== null) {
+                $this->addCopiedContacts($ticket, $row, $message, $mailbox, $author);
+            }
+        }
+        if ($ack) {
+            require_once __DIR__ . '/tmdmailer.class.php';
+            (new TmdMailer($this->db))->sendAck($tmd, $author);
+        }
 
-        return (int) $tmd->id;
+        return $tmd;
     }
 
     /**
@@ -307,9 +342,10 @@ class TmdMailHandler
     }
 
     /**
-     * Request an answer is about: the Message-ID of a request in its references when its subject is about this request
-     * (isAboutRequest()), the track id of Dolibarr of a ticket of a request (a mail written from the ticket), else the
-     * reference of a ticket or of a request in its subject
+     * Request an answer is about: the Message-ID of a request, or of a mail added to it (an answer, the first mail of a
+     * request merged into it), in its references when its subject is about this request (isAboutRequest()), the track
+     * id of Dolibarr of a ticket of a request (a mail written from the ticket), else the reference of a ticket or of a
+     * request in its subject. A request merged into another one gives that one
      *
      * @param  object $row          Row of llx_inbox_mail (message_id, in_reply_to, refs, subject)
      * @param  bool   $checkSubject False: the newest request of the thread, whatever the subject of the mail
@@ -334,12 +370,18 @@ class TmdMailHandler
             $in  = implode(',', array_map(function ($id) {
                 return "'" . $this->db->escape($id) . "'";
             }, array_slice($ids, 0, 50)));
-            // Every request of the thread, the newest first: the mail goes to the one its subject is about
-            $sql  = 'SELECT t.rowid, t.ref, t.label, k.ref AS ticket_ref, k.track_id,';
-            $sql .= ' (SELECT m.subject FROM ' . $p . 'inbox_mail AS m WHERE m.message_id = t.message_id ORDER BY m.rowid LIMIT 1) AS first_subject';
-            $sql .= ' FROM ' . $p . 'dolitmd_tmd AS t LEFT JOIN ' . $p . 'ticket AS k ON k.rowid = t.fk_ticket';
-            $sql .= ' WHERE t.entity IN (' . $entity . ') AND t.status >= 0 AND t.message_id IN (' . $in . ') ORDER BY t.rowid DESC LIMIT 50';
-            $rows = $this->db->getRows($sql);
+            // Every request of the thread, the newest first: the mail goes to the one its subject is about. A request
+            // of the thread by its first mail, or by a mail added to it (an answer, the first mail of a request merged
+            // into it: TmdMerger), with the subject of that mail too (reply_subject)
+            $select  = 'SELECT t.rowid, t.ref, t.label, k.ref AS ticket_ref, k.track_id,';
+            $select .= ' (SELECT m.subject FROM ' . $p . 'inbox_mail AS m WHERE m.message_id = t.message_id ORDER BY m.rowid LIMIT 1) AS first_subject';
+            $sql     = $select . ', NULL AS reply_subject FROM ' . $p . 'dolitmd_tmd AS t LEFT JOIN ' . $p . 'ticket AS k ON k.rowid = t.fk_ticket';
+            $sql    .= ' WHERE t.entity IN (' . $entity . ') AND t.status >= 0 AND t.message_id IN (' . $in . ')';
+            $sql    .= ' UNION ' . $select . ', COALESCE((SELECT m.subject FROM ' . $p . 'inbox_mail AS m WHERE m.message_id = r.message_id ORDER BY m.rowid LIMIT 1), o.label) AS reply_subject';
+            $sql    .= ' FROM ' . $p . 'dolitmd_tmd_reply AS r INNER JOIN ' . $p . 'dolitmd_tmd AS t ON t.rowid = r.fk_tmd LEFT JOIN ' . $p . 'ticket AS k ON k.rowid = t.fk_ticket';
+            $sql    .= ' LEFT JOIN ' . $p . 'dolitmd_tmd AS o ON o.message_id = r.message_id AND o.entity = r.entity AND o.status = ' . Tmd::STATUS_DELETED;
+            $sql    .= ' WHERE r.entity IN (' . $entity . ') AND r.fk_tmd > 0 AND t.status >= 0 AND r.message_id IN (' . $in . ')';
+            $rows    = $this->db->getRows('SELECT * FROM (' . $sql . ') AS thread ORDER BY rowid DESC LIMIT 50');
             foreach (is_array($rows) ? $rows : [] as $obj) {
                 if (!$checkSubject || self::isAboutRequest((string) $row->subject, $obj)) {
                     return (int) $obj->rowid;
@@ -347,9 +389,9 @@ class TmdMailHandler
             }
             foreach ($ids as $id) {
                 if (preg_match('/-tic(\d+)@/', $id, $match)) {
-                    $obj = $this->db->getRow('SELECT rowid FROM ' . $p . 'dolitmd_tmd WHERE entity IN (' . $entity . ') AND status >= 0 AND fk_ticket = ' . ((int) $match[1]) . ' ORDER BY rowid DESC');
-                    if (is_object($obj)) {
-                        return (int) $obj->rowid;
+                    $found = $this->liveRequest('fk_ticket = ' . ((int) $match[1]));
+                    if ($found > 0) {
+                        return $found;
                     }
                 }
             }
@@ -357,18 +399,45 @@ class TmdMailHandler
 
         $subject = (string) $row->subject;
         if (preg_match('/\b(TMD\d{4}-\d{4,})\b/', $subject, $match)) {
-            $obj = $this->db->getRow('SELECT rowid FROM ' . $p . "dolitmd_tmd WHERE entity IN (" . $entity . ") AND status >= 0 AND ref = '" . $this->db->escape($match[1]) . "'");
-            if (is_object($obj)) {
-                return (int) $obj->rowid;
+            $found = $this->liveRequest("ref = '" . $this->db->escape($match[1]) . "'");
+            if ($found > 0) {
+                return $found;
             }
         }
         if (preg_match_all('/\[([A-Za-z0-9_\-\/]{3,30})\]/', $subject, $matches)) {
-            $in  = implode(',', array_map(function ($ref) {
+            $in    = implode(',', array_map(function ($ref) {
                 return "'" . $this->db->escape($ref) . "'";
             }, array_slice(array_unique($matches[1]), 0, 10)));
-            $obj = $this->db->getRow('SELECT t.rowid FROM ' . $p . 'dolitmd_tmd AS t INNER JOIN ' . $p . 'ticket AS k ON k.rowid = t.fk_ticket WHERE t.entity IN (' . $entity . ') AND t.status >= 0 AND k.ref IN (' . $in . ') ORDER BY t.rowid DESC');
-            if (is_object($obj)) {
+            $found = $this->liveRequest('fk_ticket IN (SELECT k.rowid FROM ' . $p . 'ticket AS k WHERE k.ref IN (' . $in . '))');
+            if ($found > 0) {
+                return $found;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * Request found by a condition (its ticket, its reference), the newest first: a request merged into another one
+     * (deleted by the merge) gives the request it was merged into (TmdMerger::mergedInto())
+     *
+     * @param  string $where Condition on llx_dolitmd_tmd, escaped
+     * @return int           Id of the request, 0 when none
+     */
+    protected function liveRequest(string $where): int
+    {
+        require_once __DIR__ . '/tmdmerger.class.php';
+
+        $rows = $this->db->getRows('SELECT rowid, status FROM ' . $this->db->prefix() . 'dolitmd_tmd WHERE entity IN (' . getEntity('tmd') . ') AND ' . $where . ' ORDER BY rowid DESC LIMIT 10');
+        foreach (is_array($rows) ? $rows : [] as $obj) {
+            if ((int) $obj->status >= 0) {
                 return (int) $obj->rowid;
+            }
+        }
+        foreach (is_array($rows) ? $rows : [] as $obj) {
+            $tmd = new Tmd($this->db);
+            if ($tmd->fetch((int) $obj->rowid) > 0 && ($target = TmdMerger::mergedInto($tmd)) > 0) {
+                return $target;
             }
         }
 
@@ -398,7 +467,7 @@ class TmdMailHandler
             }
         }
         $numbers = self::subjectNumbers($text);
-        foreach ([$request->label ?? '', $request->first_subject ?? ''] as $known) {
+        foreach ([$request->label ?? '', $request->first_subject ?? '', $request->reply_subject ?? ''] as $known) {
             $key = self::subjectKey((string) $known);
             if ($key !== '' && strpos(' ' . $text . ' ', ' ' . $key . ' ') !== false && !array_diff($numbers, self::subjectNumbers($key))) {
                 return true;
@@ -479,10 +548,17 @@ class TmdMailHandler
         }
         $ticket->message = $this->bodyText($message, (string) $row->snippet);
         $ticket->private = 0;
-        if ($ticket->createTicketMessage($author, 0, [], [], [], false, 0, $langs->transnoentities('TmdReplyFrom', $sender)) < 0) {
+        $eventId         = $ticket->createTicketMessage($author, 0, [], [], [], false, 0, $langs->transnoentities('TmdReplyFrom', $sender));
+        if ($eventId < 0) {
             dol_syslog(__METHOD__ . ' answer not added to ticket ' . $ticket->id . ': ' . $ticket->error, LOG_WARNING);
+        } elseif ($eventId > 0) {
+            // The message knows its mail: taken out of the thread as a request of its own, it keeps its subject and its
+            // thread (TmdMerger::split())
+            $this->db->query('UPDATE ' . $p . "actioncomm SET email_msgid = '" . $this->db->escape(dol_trunc((string) $row->message_id, 255, 'right', 'UTF-8', 1)) . "'"
+                . ", email_from = '" . $this->db->escape(dol_trunc($sender, 255, 'right', 'UTF-8', 1)) . "', email_subject = '" . $this->db->escape(dol_trunc((string) $row->subject, 255, 'right', 'UTF-8', 1)) . "'"
+                . ' WHERE id = ' . ((int) $eventId));
         }
-        $this->saveAttachments($ticket, $message);
+        $this->saveAttachments($ticket, $message, max(0, (int) $eventId));
         $this->linkMail($row, $ticket);
         $this->addCopiedContacts($ticket, $row, $message, $mailbox, $author, $sender);
 
@@ -1080,9 +1156,10 @@ class TmdMailHandler
      *
      * @param  Ticket            $ticket  Ticket
      * @param  InboxMessage|null $message Mail parsed
+     * @param  int               $eventId Message of the ticket of an answer, 0 for the mail of the request
      * @return int                        Files saved
      */
-    protected function saveAttachments(Ticket $ticket, $message): int
+    protected function saveAttachments(Ticket $ticket, $message, int $eventId = 0): int
     {
         global $conf;
 
@@ -1118,6 +1195,12 @@ class TmdMailHandler
             }
             dolChmod($target);
             addFileIntoDatabaseIndex($dir, basename($target), '', 'uploaded', 0, $ticket);
+            // The file knows its message (as the files of a message written from the ticket): shown under it, and taken
+            // with it when the message becomes a request of its own
+            if ($eventId > 0) {
+                $this->db->query('UPDATE ' . $this->db->prefix() . 'ecm_files SET agenda_id = ' . $eventId . " WHERE filepath = '" . $this->db->escape(trim((string) preg_replace('/^' . preg_quote(DOL_DATA_ROOT, '/') . '/', '', $dir), '/\\')) . "'"
+                    . " AND filename = '" . $this->db->escape(basename($target)) . "' AND entity IN (" . getEntity('ecmfiles') . ')');
+            }
             $saved++;
         }
 
@@ -1131,7 +1214,7 @@ class TmdMailHandler
      * @param  Ticket $ticket Ticket
      * @return void
      */
-    protected function linkMail(object $row, Ticket $ticket): void
+    public function linkMail(object $row, Ticket $ticket): void
     {
         if (!dol_include_once('/inbox/class/inboxmailref.class.php') || !dol_include_once('/inbox/class/inboxlink.class.php') || !class_exists('InboxLink')) {
             return;
@@ -1144,5 +1227,50 @@ class TmdMailHandler
                 dol_syslog(__METHOD__ . ' mail not linked to ticket ' . $ticket->id . ': ' . $links->error, LOG_WARNING);
             }
         }
+    }
+
+    /**
+     * The mail no longer linked to a ticket in Inbox (a message taken out of the thread of a request): only the link
+     * made by DoliTMD. Nothing when the version of Inbox cannot do it
+     *
+     * @param  object $row      Row of llx_inbox_mail
+     * @param  int    $ticketId Ticket
+     * @return void
+     */
+    public function unlinkMail(object $row, int $ticketId): void
+    {
+        if (!dol_include_once('/inbox/class/inboxmailref.class.php') || !dol_include_once('/inbox/class/inboxlink.class.php') || !class_exists('InboxLink')
+            || !method_exists('InboxMailRef', 'fetchOrCreate') || !method_exists('InboxLink', 'listFor') || !method_exists('InboxLink', 'unlink')) {
+            return;
+        }
+        $mailrefId = (new InboxMailRef($this->db))->fetchOrCreate($row);
+        if ($mailrefId <= 0) {
+            return;
+        }
+        $links = new InboxLink($this->db);
+        foreach ((array) $links->listFor([$mailrefId]) as $link) {
+            if (($link['type'] ?? '') === 'ticket' && (int) ($link['element'] ?? 0) === $ticketId && ($link['origin'] ?? '') === 'dolitmd') {
+                $links->unlink((int) $link['id']);
+            }
+        }
+    }
+
+    /**
+     * Row of the index of Inbox of a mail, by its Message-ID (the copy of the TMD mailbox first)
+     *
+     * @param  string      $messageId Message-ID
+     * @return object|null            Row of llx_inbox_mail, as handleMail() reads it
+     */
+    public function mailRow(string $messageId): ?object
+    {
+        if (trim($messageId) === '' || !isModEnabled('inbox')) {
+            return null;
+        }
+        $mailbox = self::configuredMailbox($this->db);
+        $row     = $this->db->getRow('SELECT rowid, fk_account, message_id, in_reply_to, refs, date_mail, date_received, from_email, from_name, to_text, cc_text, subject, snippet, requester_email FROM '
+            . $this->db->prefix() . "inbox_mail WHERE message_id = '" . $this->db->escape($messageId) . "'"
+            . ' ORDER BY ' . ($mailbox !== null ? '(fk_account = ' . ((int) $mailbox->rowid) . ') DESC, ' : '') . 'rowid ASC');
+
+        return is_object($row) ? $row : null;
     }
 }
