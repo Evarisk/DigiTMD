@@ -86,8 +86,8 @@ badge rouge dans la liste et sur la fiche, carte et filtre rapide « En retard �
 
 Action de masse **Créer les factures** : une facture brouillon par tiers, une ligne par demande (service choisi dans la
 configuration, à son prix pour le tiers ; référence de la demande, objet et ticket en description). Les demandes passent
-à Facturé et gardent leur facture ; une facture brouillon supprimée les remet à Fait. Une demande sans tiers ou déjà
-sur une facture est laissée de côté.
+à Facturé et gardent leur facture ; une facture brouillon supprimée les remet à Fait. Une demande sans tiers, déjà
+sur une facture ou erronée est laissée de côté.
 
 ### Documents et page de suivi client
 
@@ -128,7 +128,9 @@ jamais proposé aux modèles.
 Menu DoliTMD (liste générique de Saturne) : tiers, état, suivi, ID nomeref de la demande, ticket,
 objet (et l'expéditeur, colonne à ajouter ; sans tiers connu, l'adresse s'affiche dans la colonne Tiers).
 
-- **État** (En attente, Fait, Facturé) : choisi directement dans la liste, aux couleurs de son badge.
+- **État** (En attente, Sous-traitance, Fait, Facturé, Demande erronée) : choisi directement dans la liste, aux couleurs
+  de son badge. **Demande erronée** : un mail qui n'est pas une demande ; grisée dans la liste, jamais en retard ni
+  facturée, son ticket est annulé ; sur sa page de suivi, le client la voit « Clôturée ».
 - **Suivi** : deux pictos, Fait et Facturé, changés d'un clic. Facturé implique Fait (cocher Facturé coche Fait,
   décocher Fait décoche Facturé) ; l'état suit.
 - **ID nomeref** : saisi directement dans la liste (Entrée enregistre, Échap annule). Vide, il prend tout seul le nom
@@ -140,8 +142,10 @@ objet (et l'expéditeur, colonne à ajouter ; sans tiers connu, l'adresse s'affi
   (« DEMANDE DGD X1234567 PANAMA »). Le pays cité dans l'objet compte d'abord : un pays d'Europe seul n'y décide rien
   (le texte n'est pas lu, l'adresse d'une signature ne compte pas). Les demandes sans catégorie sont relues par la
   tâche planifiée.
-- **Ticket** : une demande qui passe à Fait (ou Facturé) ferme son ticket (résolu) ; remise En attente, elle le rouvre.
-- **Actions de masse** : Passer à Facturé, Passer à Fait, Remettre en attente (avec confirmation), export, suppression.
+- **Ticket** : une demande qui passe à Fait (ou Facturé) ferme son ticket (résolu), une demande erronée l'annule ;
+  remise En attente, elle le rouvre.
+- **Actions de masse** : Passer à Facturé, Passer à Fait, Passer en sous-traitance, Remettre en attente, Passer en
+  demande erronée (avec confirmation), Fusionner, export, suppression.
 - Au-dessus : le nombre de demandes par état (mis à jour en direct) et les filtres rapides.
 
 Une demande peut aussi être saisie à la main (Nouvelle demande TMD).

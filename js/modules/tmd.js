@@ -41,16 +41,18 @@ window.dolitmd.tmd.init = function() {
 };
 
 /**
- * Rows of the list greyed while their request is subcontracted: its state is given by the column « State » or
- * « Follow-up » (either may be hidden)
+ * Rows of the list greyed while their request is subcontracted (3) or erroneous (4): its state is given by the column
+ * « State » or « Follow-up » (either may be hidden)
  *
  * @param   {jQuery} rows Rows of the list (tr[data-rowid])
  * @returns {void}
  */
 window.dolitmd.tmd.markRows = function(rows) {
   rows.each(function() {
-    const row = $(this);
-    row.toggleClass('dolitmd-row--subcontracted', String(row.find('[data-dolitmd-state]').first().attr('data-dolitmd-state')) === '3');
+    const row   = $(this);
+    const state = String(row.find('[data-dolitmd-state]').first().attr('data-dolitmd-state'));
+    row.toggleClass('dolitmd-row--subcontracted', state === '3');
+    row.toggleClass('dolitmd-row--erroneous', state === '4');
   });
 };
 

@@ -281,6 +281,7 @@ dolitmd_ajax_reply(200, [
         'late'          => $object->countLate(),
         'pending'       => $counts[Tmd::STATUS_PENDING],
         'subcontracted' => $counts[Tmd::STATUS_SUBCONTRACTED],
+        'erroneous'     => $counts[Tmd::STATUS_ERRONEOUS],
         'done'          => $counts[Tmd::STATUS_DONE],
         'invoiced'      => $counts[Tmd::STATUS_INVOICED],
         'total'         => array_sum($counts),
@@ -289,7 +290,7 @@ dolitmd_ajax_reply(200, [
     'id'       => (int) $object->id,
     'done'     => (int) $object->done,
     'invoiced' => (int) $object->invoiced,
-    // The row of a subcontracted request is greyed
+    // The row of a subcontracted or erroneous request is greyed
     'code'     => (int) $object->status,
     'status'   => $object->getLibStatut(5),
     'state'    => dolitmd_state_html($object, true),

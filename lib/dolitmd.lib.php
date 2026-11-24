@@ -110,7 +110,7 @@ function dolitmd_flag_html(Tmd $object, string $field, bool $canWrite): string
 
 /**
  * Done and invoiced side by side: the column « Follow-up » of the list, then the invoice of an invoiced request. Its
- * state too, for js/modules/tmd.js (row of a subcontracted request greyed, column « State » hidden or not)
+ * state too, for js/modules/tmd.js (row of a subcontracted or erroneous request greyed, column « State » hidden or not)
  *
  * @param  Tmd    $object   TMD request
  * @param  bool   $canWrite The user may change them
@@ -149,7 +149,7 @@ function dolitmd_invoice_html(Tmd $object): string
 
 /**
  * Deadline of a TMD request in the list: red « Late » when passed and not done, orange within two days (neither for a
- * subcontracted request, never late)
+ * subcontracted or erroneous request, never late)
  *
  * @param  Tmd    $object TMD request
  * @return string         HTML of the deadline
@@ -168,7 +168,7 @@ function dolitmd_due_html(Tmd $object): string
     if (!empty($object->done)) {
         return '<span class="dolitmd-due dolitmd-due--done">' . $date . '</span>';
     }
-    if ((int) $object->status === Tmd::STATUS_SUBCONTRACTED) {
+    if (in_array((int) $object->status, Tmd::STATES_ASIDE, true)) {
         return '<span class="dolitmd-due">' . $date . '</span>';
     }
     if ($due < $today) {
@@ -195,6 +195,7 @@ function dolitmd_mass_states(): array
         'tmddone'          => ['state' => Tmd::STATUS_DONE, 'label' => 'TmdMassToDone', 'stateLabel' => 'TmdStatusDone', 'icon' => 'fa-check-circle'],
         'tmdsubcontracted' => ['state' => Tmd::STATUS_SUBCONTRACTED, 'label' => 'TmdMassToSubcontracted', 'stateLabel' => 'TmdStatusSubcontracted', 'icon' => 'fa-people-arrows'],
         'tmdpending'       => ['state' => Tmd::STATUS_PENDING, 'label' => 'TmdMassToPending', 'stateLabel' => 'TmdStatusPending', 'icon' => 'fa-hourglass-half'],
+        'tmderroneous'     => ['state' => Tmd::STATUS_ERRONEOUS, 'label' => 'TmdMassToErroneous', 'stateLabel' => 'TmdStatusErroneous', 'icon' => 'fa-ban'],
     ];
 }
 
@@ -211,7 +212,7 @@ function dolitmd_state_html(Tmd $object, bool $canWrite): string
     global $langs;
 
     $state = (int) $object->status;
-    // The state, read by js/modules/tmd.js: row of a subcontracted request greyed
+    // The state, read by js/modules/tmd.js: row of a subcontracted or erroneous request greyed
     if (!$canWrite) {
         return '<span class="dolitmd-state-badge" data-dolitmd-state="' . $state . '">' . $object->getLibStatut(5) . '</span>';
     }

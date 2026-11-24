@@ -8,6 +8,11 @@ $dt-subcontracted: #6d28d9;
 $dt-subcontracted-soft: #ede9fe;
 $dt-subcontracted-border: rgba(124, 58, 237, .3);
 
+// State « Erroneous request »: brown, as the badge status8 of Dolibarr (refused)
+$dt-erroneous: #994013;
+$dt-erroneous-soft: #f8ece5;
+$dt-erroneous-border: rgba(153, 64, 19, .3);
+
 // Invoiced not ticked yet: a soft red, clear without shouting
 $dt-missing: #d64545;
 $dt-missing-strong: #c53030;
@@ -195,6 +200,13 @@ body#mainbody .div-table-responsive select.dolitmd-state {
     color: $dt-subcontracted !important;
   }
 
+  // Erroneous request: brown, as its badge
+  &.dolitmd-state--4 {
+    background-color: $dt-erroneous-soft !important;
+    border: 1px solid $dt-erroneous-border !important;
+    color: $dt-erroneous !important;
+  }
+
   &.dolitmd-state--saving {
     opacity: .55;
     cursor: progress;
@@ -225,6 +237,12 @@ body#mainbody .saturne-kpi-card.saturne-kpi-card-purple .saturne-kpi-card-icon {
   color: $dt-subcontracted;
 }
 
+// Card « Erroneous request » above the list: brown, as its badge
+body#mainbody .saturne-kpi-card.saturne-kpi-card-brown .saturne-kpi-card-icon {
+  background: $dt-erroneous-soft;
+  color: $dt-erroneous;
+}
+
 // Badge « Subcontracted » (card, list for those who may not change it): violet, over the grey of badge-status5
 body#mainbody .badge.badge-status5.dolitmd-badge-subcontracted {
   background: $dt-subcontracted-soft !important;
@@ -237,14 +255,16 @@ body#mainbody .badge.badge-status5.dolitmd-badge-subcontracted {
   }
 }
 
-// Row of a subcontracted request in the list (class set by js/modules/tmd.js): greyed, its state left in colour to
-// tell why, a bit clearer under the mouse
-body#mainbody tr.dolitmd-row--subcontracted > td:not([data-colkey="status"]) {
+// Row of a subcontracted or erroneous request in the list (class set by js/modules/tmd.js): greyed, its state left in
+// colour to tell why, a bit clearer under the mouse
+body#mainbody tr.dolitmd-row--subcontracted > td:not([data-colkey="status"]),
+body#mainbody tr.dolitmd-row--erroneous > td:not([data-colkey="status"]) {
   opacity: .45;
   filter: grayscale(1);
 }
 
-body#mainbody tr.dolitmd-row--subcontracted:hover > td:not([data-colkey="status"]) {
+body#mainbody tr.dolitmd-row--subcontracted:hover > td:not([data-colkey="status"]),
+body#mainbody tr.dolitmd-row--erroneous:hover > td:not([data-colkey="status"]) {
   opacity: .75;
 }
 

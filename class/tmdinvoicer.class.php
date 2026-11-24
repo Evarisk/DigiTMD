@@ -95,6 +95,11 @@ class TmdInvoicer
             if ($id <= 0 || $tmd->fetch($id) <= 0 || (int) $tmd->status === Tmd::STATUS_DELETED) {
                 continue;
             }
+            // An erroneous request is no request: never invoiced
+            if ((int) $tmd->status === Tmd::STATUS_ERRONEOUS) {
+                $this->skipped[] = $tmd->ref . ' : ' . $langs->transnoentities('TmdInvoiceErroneous');
+                continue;
+            }
             if ($tmd->fk_facture > 0) {
                 $this->skipped[] = $tmd->ref . ' : ' . $langs->transnoentities('TmdInvoiceAlready');
                 continue;
