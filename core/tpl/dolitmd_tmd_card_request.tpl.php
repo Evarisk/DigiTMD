@@ -22,7 +22,7 @@
  *          (the timeline of the messages of a ticket)
  *
  * Rendered by core/tpl/dolitmd_tmd_card_view.tpl.php (inherits its scope).
- * Expects: $object, $langs, $user, $conf
+ * Expects: $object, $langs, $user, $conf, $permissiontoadd (an answer may be taken out as a request of its own)
  */
 
 $thread = $object->getRequestThread();
@@ -44,7 +44,13 @@ foreach ($thread as $item) {
     print '<i class="fa ' . ($icons[$item['code']] ?? 'fa-comment') . '"></i>';
     print '<div class="timeline-item">';
     print '<span class="time"><i class="fa fa-clock valignmiddle"></i> <span class="valignmiddle">' . dol_print_date($item['date'], 'day', 'tzuserrel') . ' ' . dol_print_date($item['date'], 'hour', 'tzuserrel', null, false, 'opacitymedium') . '</span></span>';
-    print '<h3 class="timeline-header">' . dol_escape_htmltag($item['title']) . '</h3>';
+    print '<h3 class="timeline-header">' . dol_escape_htmltag($item['title']);
+    // An answer received that is a new request (written as an answer to this one): taken out as a request of its own
+    if (!empty($permissiontoadd) && $item['code'] === 'ticket_msg' && (int) $item['id'] > 0) {
+        print '<a class="dolitmd-request-split" href="' . dol_escape_htmltag($_SERVER['PHP_SELF'] . '?id=' . $object->id . '&action=splitmessage&messageid=' . ((int) $item['id']) . '&token=' . newToken()) . '" title="' . dol_escape_htmltag($langs->trans('TmdSplitHelp')) . '">';
+        print '<i class="fas fa-file-export"></i> ' . $langs->trans('TmdSplit') . '</a>';
+    }
+    print '</h3>';
     print '<div class="timeline-body wordbreak">';
     if (trim(dol_string_nohtmltag($item['message'])) !== '') {
         print dolPrintHTML($item['message'], 0, ['pre', 'code']);

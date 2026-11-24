@@ -63,8 +63,16 @@ if (empty($action) && empty($id) && empty($ref)) {
 
 include DOL_DOCUMENT_ROOT . '/core/actions_fetchobject.inc.php'; // Must be included, not include_once
 
-// A deleted request is never shown
+// A deleted request is never shown: one merged into another request leads to that one
 if ($object->id > 0 && (int) $object->status === Tmd::STATUS_DELETED) {
+    require_once __DIR__ . '/../../class/tmdmerger.class.php';
+    $mergedInto = TmdMerger::mergedInto($object);
+    $target     = new Tmd($db);
+    if ($mergedInto > 0 && $user->hasRight('dolitmd', 'tmd', 'read') && $target->fetch($mergedInto) > 0) {
+        setEventMessages($langs->trans('TmdMergedInto', $object->ref, $target->ref), null, 'warnings');
+        header('Location: ' . $_SERVER['PHP_SELF'] . '?id=' . $target->id);
+        exit;
+    }
     accessforbidden($langs->trans('ErrorRecordNotFound'));
 }
 
@@ -153,6 +161,23 @@ if (empty($resHook)) {
             setEventMessages($error, null, 'errors');
             $action = 'presend' . $mail;
         }
+    }
+
+    // A message of the thread taken out as a request of its own (a new request written as an answer to this one), once
+    // confirmed. Merging requests is done from the list (mass action, hook doActions)
+    if ($action == 'confirm_splitmessage' && $confirm == 'yes' && $permissiontoadd && $object->id > 0) {
+        require_once __DIR__ . '/../../class/tmdmerger.class.php';
+        $merger = new TmdMerger($db);
+        $newId  = $merger->split($object, GETPOSTINT('messageid'), $user, GETPOST('split_subject', 'alphanohtml'));
+        if ($newId > 0) {
+            $created = new Tmd($db);
+            $created->fetch($newId);
+            setEventMessages($langs->trans('TmdSplitDone', $created->ref, $object->ref), null);
+            header('Location: ' . $_SERVER['PHP_SELF'] . '?id=' . $newId);
+            exit;
+        }
+        setEventMessages($merger->error, $merger->errors, 'errors');
+        $action = '';
     }
 
     // A document of the line « Attached files » deleted once confirmed, as the tab Documents deletes it: the file, its
