@@ -248,6 +248,12 @@ $pt-error-bg: #fee2e2;
     color: $pt-invoiced;
   }
 
+  // Closed (an erroneous request): neutral, nothing more to wait for
+  .dolitmd-public__state--closed {
+    background: $pt-soft;
+    color: $pt-muted;
+  }
+
   // Steps: received, being processed, done
   .dolitmd-public__steps {
     display: flex;

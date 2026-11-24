@@ -92,15 +92,17 @@ $size = static function (int $bytes) use ($langs): string {
     <?php else : ?>
         <?php
         // Screen « request »: its state, its steps, its documents
-        $state   = (int) $object->status;
-        $isDone  = !empty($object->done);
+        $state    = (int) $object->status;
+        $isDone   = !empty($object->done);
+        // Erroneous: the customer sees its request closed, without more (no step going on)
+        $isClosed = $state === Tmd::STATUS_ERRONEOUS;
         // Subcontracted: an internal matter, the customer sees its request being processed
-        $stateKeys = [Tmd::STATUS_PENDING => 'pending', Tmd::STATUS_SUBCONTRACTED => 'pending', Tmd::STATUS_DONE => 'done', Tmd::STATUS_INVOICED => 'invoiced'];
+        $stateKeys = [Tmd::STATUS_PENDING => 'pending', Tmd::STATUS_SUBCONTRACTED => 'pending', Tmd::STATUS_DONE => 'done', Tmd::STATUS_INVOICED => 'invoiced', Tmd::STATUS_ERRONEOUS => 'closed'];
         $stateKey  = $stateKeys[$state] ?? 'pending';
 
         // The deadline is told while it is ahead only
         $due      = empty($object->date_due) ? 0 : (is_numeric($object->date_due) ? (int) $object->date_due : (int) $db->jdate($object->date_due));
-        $showDue  = !$isDone && $due > 0 && $due >= dol_get_first_hour(dol_now());
+        $showDue  = !$isDone && !$isClosed && $due > 0 && $due >= dol_get_first_hour(dol_now());
         $received = $date($object->date_mail ?: $object->date_creation, 'dayhour');
         $doneDate = $date($object->date_done, 'day');
         $reference = $ticketRef ?: (string) $object->ref;
@@ -114,7 +116,7 @@ $size = static function (int $bytes) use ($langs): string {
                 <?php endif; ?>
             </div>
             <span class="dolitmd-public__state dolitmd-public__state--<?php echo $stateKey; ?>">
-                <i class="fas <?php echo $isDone ? 'fa-check-circle' : 'fa-hourglass-half'; ?>"></i><?php echo $langs->trans('TmdPublicState' . ucfirst($stateKey)); ?>
+                <i class="fas <?php echo $isDone ? 'fa-check-circle' : ($isClosed ? 'fa-times-circle' : 'fa-hourglass-half'); ?>"></i><?php echo $langs->trans('TmdPublicState' . ucfirst($stateKey)); ?>
             </span>
         </div>
 
@@ -124,7 +126,7 @@ $size = static function (int $bytes) use ($langs): string {
                 <span class="dolitmd-public__step-label"><?php echo $langs->trans('TmdPublicStepReceived'); ?></span>
                 <span class="dolitmd-public__step-date"><?php echo $date($object->date_mail ?: $object->date_creation, 'day'); ?></span>
             </li>
-            <li class="dolitmd-public__step <?php echo $isDone ? 'is-done' : 'is-current'; ?>">
+            <li class="dolitmd-public__step <?php echo $isDone ? 'is-done' : ($isClosed ? 'is-todo' : 'is-current'); ?>">
                 <span class="dolitmd-public__dot"><i class="fas <?php echo $isDone ? 'fa-check' : 'fa-cog'; ?>"></i></span>
                 <span class="dolitmd-public__step-label"><?php echo $langs->trans('TmdPublicStepProcessing'); ?></span>
                 <span class="dolitmd-public__step-date"><?php echo $showDue ? $langs->trans('TmdPublicDueBefore', $date($due, 'day')) : ''; ?></span>
@@ -160,6 +162,8 @@ $size = static function (int $bytes) use ($langs): string {
             <?php endif; ?>
         </dl>
 
+        <?php // Closed without document: nothing will come, no block promising some
+        if (!$isClosed || !empty($files)) : ?>
         <section class="dolitmd-public__docs">
             <h2 class="dolitmd-public__subtitle">
                 <?php echo $langs->trans('TmdPublicDocuments'); ?>
@@ -188,6 +192,7 @@ $size = static function (int $bytes) use ($langs): string {
                 </ul>
             <?php endif; ?>
         </section>
+        <?php endif; ?>
 
         <?php if ($contact !== '') :
             $mailto = 'mailto:' . $contact . '?subject=' . rawurlencode('Re: ' . ($object->label ?: $reference) . ($ticketRef !== '' ? ' [' . $ticketRef . ']' : ''));
