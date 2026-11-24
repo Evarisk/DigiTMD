@@ -174,6 +174,8 @@ class ActionsDolitmd
             ['id' => 'subcontracted', 'label' => $langs->transnoentities('TmdStatusSubcontracted'), 'value' => (string) $counts[Tmd::STATUS_SUBCONTRACTED], 'icon' => 'fas fa-people-arrows', 'color' => 'purple'],
             ['id' => 'done', 'label' => $langs->transnoentities('TmdStatusDoneToInvoice'), 'value' => (string) $counts[Tmd::STATUS_DONE], 'icon' => 'fas fa-check', 'color' => 'green'],
             ['id' => 'invoiced', 'label' => $langs->transnoentities('TmdStatusInvoiced'), 'value' => (string) $counts[Tmd::STATUS_INVOICED], 'icon' => 'fas fa-file-invoice-dollar', 'color' => 'grey'],
+            // Brown, as the badge of the state (status8): a colour of DoliTMD too
+            ['id' => 'erroneous', 'label' => $langs->transnoentities('TmdStatusErroneous'), 'value' => (string) $counts[Tmd::STATUS_ERRONEOUS], 'icon' => 'fas fa-ban', 'color' => 'brown'],
             ['id' => 'total', 'label' => $langs->transnoentities('TmdRequests'), 'value' => (string) $total, 'icon' => 'fas fa-truck-moving', 'color' => 'blue'],
         ];
 
@@ -187,7 +189,7 @@ class ActionsDolitmd
         $listUrl   .= $category !== null ? '&search_category=' . urlencode($category) : '';
         $presets    = [['label' => $langs->transnoentities('TmdAll'), 'url' => $listUrl . ($category !== null ? '' : '&button_removefilter=1'), 'icon' => 'fas fa-list', 'active' => empty($selected) && !$lateActive]];
         // Late: not done, deadline yesterday at the latest (the filters of the list: follow-up and deadline), never a
-        // subcontracted one (the state pending)
+        // subcontracted or erroneous one (the state pending)
         $yesterday  = dol_time_plus_duree(dol_now(), -1, 'd');
         $presets[]  = [
             'label'  => $langs->transnoentities('TmdLate'),
@@ -200,6 +202,7 @@ class ActionsDolitmd
             Tmd::STATUS_SUBCONTRACTED => ['TmdStatusSubcontracted', 'fas fa-people-arrows'],
             Tmd::STATUS_DONE          => ['TmdStatusDoneToInvoice', 'fas fa-check'],
             Tmd::STATUS_INVOICED      => ['TmdStatusInvoiced', 'fas fa-file-invoice-dollar'],
+            Tmd::STATUS_ERRONEOUS     => ['TmdStatusErroneous', 'fas fa-ban'],
         ];
         foreach ($statePresets as $status => $preset) {
             $presets[] = [
