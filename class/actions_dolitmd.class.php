@@ -240,6 +240,8 @@ class ActionsDolitmd
             foreach (dolitmd_mass_states() as $code => $state) {
                 $actions[$code] = '<span class="fas ' . $state['icon'] . ' paddingrightonly"></span>' . $langs->trans($state['label']);
             }
+            // Requests that are one (a mail sent twice, an answer that made a request): merged into one of them
+            $actions['tmdmerge'] = '<span class="fas fa-object-group paddingrightonly"></span>' . $langs->trans('TmdMassMerge');
         }
         if (!empty($listXlsxExportAvailable)) {
             $actions['export_xlsx'] = '<span class="fas fa-file-excel paddingrightonly"></span>' . $langs->trans('XlsxExportSelection');
@@ -255,7 +257,8 @@ class ActionsDolitmd
     }
 
     /**
-     * Confirmation of a mass change of state
+     * Confirmation of a mass change of state, of the invoices, of a merge (the request kept chosen among the ones
+     * checked, the oldest one first)
      *
      * @param  array $parameters Hook metadata (context, etc...)
      * @return int               0 < on error, 0 on success, 1 to replace standard code
@@ -268,7 +271,7 @@ class ActionsDolitmd
         $states          = dolitmd_mass_states();
         // The mass action of the page: emptied by the list once confirmed (the select still posts it)
         $massaction      = (string) $massaction;
-        if (strpos($parameters['context'] ?? '', 'tmdlist_saturne') === false || (!isset($states[$massaction]) && $massaction !== 'tmdinvoice')) {
+        if (strpos($parameters['context'] ?? '', 'tmdlist_saturne') === false || (!isset($states[$massaction]) && !in_array($massaction, ['tmdinvoice', 'tmdmerge'], true))) {
             return 0;
         }
 
@@ -278,6 +281,17 @@ class ActionsDolitmd
 
         if ($massaction === 'tmdinvoice') {
             $this->resprints = $form->formconfirm($_SERVER['PHP_SELF'], $langs->trans('TmdMassCreateInvoices'), $langs->trans('TmdMassCreateInvoicesQuestion', count($toselect)), 'tmd_create_invoices', [], 'yes', 0, 200, 500, 1);
+            return 0;
+        }
+        if ($massaction === 'tmdmerge') {
+            require_once __DIR__ . '/tmdmerger.class.php';
+            $requests = (new TmdMerger($db))->requestLabels(array_map('intval', $toselect));
+            if (count($requests) < 2) {
+                setEventMessages($langs->trans('TmdMergeNeedTwo'), null, 'warnings');
+                return 0;
+            }
+            $question = [['type' => 'select', 'name' => 'tmd_merge_keep', 'label' => $langs->trans('TmdMergeKeep'), 'values' => $requests, 'default' => (string) array_key_first($requests), 'select_show_empty' => 0, 'morecss' => 'minwidth400 maxwidth500 widthcentpercentminusx']];
+            $this->resprints = $form->formconfirm($_SERVER['PHP_SELF'], $langs->trans('TmdMassMerge'), $langs->trans('TmdMassMergeQuestion', count($requests)), 'tmd_merge', $question, 'yes', 0, 250, 700, 1);
             return 0;
         }
 
@@ -305,7 +319,7 @@ class ActionsDolitmd
             $this->setTicketReplyTo($object);
             return 0;
         }
-        if (!is_object($object) || $object->element !== 'tmd' || !in_array($action, ['tmd_set_state', 'tmd_create_invoices'], true) || GETPOST('confirm', 'alpha') !== 'yes') {
+        if (!is_object($object) || $object->element !== 'tmd' || !in_array($action, ['tmd_set_state', 'tmd_create_invoices', 'tmd_merge'], true) || GETPOST('confirm', 'alpha') !== 'yes') {
             return 0;
         }
         if (!$user->hasRight('dolitmd', 'tmd', 'write')) {
@@ -317,6 +331,9 @@ class ActionsDolitmd
 
         if ($action === 'tmd_create_invoices') {
             return $this->createInvoices();
+        }
+        if ($action === 'tmd_merge') {
+            return $this->mergeRequests();
         }
         $state   = GETPOSTINT('tmd_state');
         $changed = 0;
@@ -380,6 +397,58 @@ class ActionsDolitmd
             // For this page only: never saved
             $conf->global->TICKET_NOTIFICATION_EMAIL_REPLYTO = (string) $mailbox->email;
         }
+    }
+
+    /**
+     * Requests checked merged into the one chosen, once confirmed (TmdMerger::merge(), one after the other)
+     *
+     * @return int 0
+     */
+    protected function mergeRequests(): int
+    {
+        global $langs, $user;
+
+        require_once __DIR__ . '/tmdmerger.class.php';
+
+        $ids    = array_values(array_unique(array_filter(array_map('intval', (array) GETPOST('toselect', 'array')))));
+        $keepId = GETPOSTINT('tmd_merge_keep');
+        $target = new Tmd($this->db);
+        if (count($ids) < 2 || !in_array($keepId, $ids, true) || $target->fetch($keepId) <= 0 || (int) $target->status < 0) {
+            setEventMessages($langs->trans('TmdMergeNeedTwo'), [], 'errors');
+            return 0;
+        }
+
+        $merger = new TmdMerger($this->db);
+        $merged = [];
+        $errors = [];
+        // Tickets cancelled, contacts added: a warning their triggers print would land above the page
+        ob_start();
+        foreach (array_diff($ids, [$keepId]) as $id) {
+            $source = new Tmd($this->db);
+            if ($source->fetch($id) <= 0 || (int) $source->status < 0) {
+                continue;
+            }
+            // The request kept read again: the merge before changed it (answers, fields taken)
+            $target->fetch($keepId);
+            if ($merger->merge($target, $source, $user) > 0) {
+                $merged[] = $source->ref;
+            } else {
+                $errors[] = $source->ref . ' : ' . $merger->error;
+            }
+        }
+        $printed = ob_get_clean();
+        if (trim((string) $printed) !== '') {
+            dol_syslog(__METHOD__ . ' output dropped: ' . dol_trunc(strip_tags((string) $printed), 500), LOG_WARNING);
+        }
+
+        if ($merged) {
+            setEventMessages($langs->trans('TmdMassMergeDone', implode(', ', $merged), $target->getNomUrl(1)), []);
+        }
+        if ($errors) {
+            setEventMessages($langs->trans('TmdMergeError'), $errors, 'errors');
+        }
+
+        return 0;
     }
 
     /**
