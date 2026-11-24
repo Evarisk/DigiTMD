@@ -44,7 +44,7 @@ class Dolitmd extends DolibarrApi
     /**
      * States of a request by their name
      */
-    public const STATES = ['pending' => Tmd::STATUS_PENDING, 'subcontracted' => Tmd::STATUS_SUBCONTRACTED, 'done' => Tmd::STATUS_DONE, 'invoiced' => Tmd::STATUS_INVOICED];
+    public const STATES = ['pending' => Tmd::STATUS_PENDING, 'subcontracted' => Tmd::STATUS_SUBCONTRACTED, 'done' => Tmd::STATUS_DONE, 'invoiced' => Tmd::STATUS_INVOICED, 'erroneous' => Tmd::STATUS_ERRONEOUS];
 
     /**
      * @var Tmd $tmd {@type Tmd}
@@ -65,8 +65,8 @@ class Dolitmd extends DolibarrApi
     /**
      * Get a TMD request
      *
-     * Besides its fields: state (pending, subcontracted, done or invoiced), late (deadline passed, not done nor
-     * subcontracted), public_url (tracking
+     * Besides its fields: state (pending, subcontracted, done, invoiced or erroneous), late (deadline passed, not done,
+     * nor subcontracted, nor erroneous), public_url (tracking
      * page of the customer).
      *
      * @param  int   $id ID of the request
@@ -112,9 +112,9 @@ class Dolitmd extends DolibarrApi
      * @param  string $sortorder  Sort order: ASC or DESC (default: DESC)
      * @param  int    $limit      Maximum number of results (default: 100)
      * @param  int    $page       Page number, from 0
-     * @param  string $state      Only the requests in this state: pending, subcontracted, done, invoiced, or late (deadline passed, not done nor subcontracted)
+     * @param  string $state      Only the requests in this state: pending, subcontracted, done, invoiced, erroneous, or late (deadline passed, not done, nor subcontracted, nor erroneous)
      * @param  int    $thirdparty Only the requests of this thirdparty (ID)
-     * @param  string $sqlfilters Other criteria. Example: "(t.email_from:like:'%@staci.com')"
+     * @param  string $sqlfilters Other criteria. Example: "(t.email_from:like:'%@client.example')"
      * @param  string $properties Properties to return, separated by commas. Empty = all
      * @param  string $category   Only the requests of this category: ADR, IATA or IMDG
      * @return array              List of requests
@@ -131,11 +131,11 @@ class Dolitmd extends DolibarrApi
         $sql .= ' WHERE t.entity IN (' . getEntity('tmd') . ') AND t.status >= 0';
         if ($state !== '') {
             if ($state === 'late') {
-                $sql .= ' AND t.status <> ' . Tmd::STATUS_SUBCONTRACTED . " AND t.done = 0 AND t.date_due IS NOT NULL AND t.date_due < '" . $this->db->idate(dol_get_first_hour(dol_now())) . "'";
+                $sql .= ' AND t.status NOT IN (' . implode(',', Tmd::STATES_ASIDE) . ") AND t.done = 0 AND t.date_due IS NOT NULL AND t.date_due < '" . $this->db->idate(dol_get_first_hour(dol_now())) . "'";
             } elseif (isset(self::STATES[$state])) {
                 $sql .= ' AND t.status = ' . ((int) self::STATES[$state]);
             } else {
-                throw new RestException(400, 'Bad state ' . $state . ': pending, subcontracted, done, invoiced or late');
+                throw new RestException(400, 'Bad state ' . $state . ': pending, subcontracted, done, invoiced, erroneous or late');
             }
         }
         if ($thirdparty > 0) {
@@ -222,9 +222,9 @@ class Dolitmd extends DolibarrApi
     /**
      * Change a TMD request
      *
-     * Same fields as for the creation. The state changes with « state » (pending, subcontracted, done, invoiced) or the
-     * ticks « done » and « invoiced » (invoiced means done; neither: a subcontracted request stays so): the ticket of the
-     * request is closed or opened again. No mail leaves: the
+     * Same fields as for the creation. The state changes with « state » (pending, subcontracted, done, invoiced,
+     * erroneous) or the ticks « done » and « invoiced » (invoiced means done; neither: a subcontracted or erroneous
+     * request stays so): the ticket of the request is closed, cancelled or opened again. No mail leaves: the
      * mail « request done » is sent by POST {id}/senddone.
      *
      * @param  int   $id           ID of the request
@@ -259,15 +259,15 @@ class Dolitmd extends DolibarrApi
     }
 
     /**
-     * Change the state of a TMD request: pending, subcontracted, done or invoiced
+     * Change the state of a TMD request: pending, subcontracted, done, invoiced or erroneous
      *
-     * As the state chosen in the list: the ticket of the request is closed (done) or opened again (pending). No mail
-     * leaves: the mail « request done » is sent by POST {id}/senddone.
+     * As the state chosen in the list: the ticket of the request is closed (done), cancelled (erroneous) or opened again
+     * (pending). No mail leaves: the mail « request done » is sent by POST {id}/senddone.
      *
      * Example: { "state": "done" }
      *
      * @param  int    $id    ID of the request
-     * @param  string $state pending, subcontracted, done or invoiced
+     * @param  string $state pending, subcontracted, done, invoiced or erroneous
      * @return array|mixed   Data of the request
      *
      * @url PUT {id}/state
@@ -549,8 +549,9 @@ class Dolitmd extends DolibarrApi
     }
 
     /**
-     * State asked by the data: « state » (pending, subcontracted, done, invoiced, or 0, 3, 1, 2), else the ticks
-     * « done » and « invoiced » (invoiced means done, not done means not invoiced, neither keeps subcontracted)
+     * State asked by the data: « state » (pending, subcontracted, done, invoiced, erroneous, or 0, 3, 1, 2, 4), else the
+     * ticks « done » and « invoiced » (invoiced means done, not done means not invoiced, neither keeps subcontracted or
+     * erroneous)
      *
      * @param  array<string,mixed> $data    Data received
      * @param  Tmd|null            $current Request changed, null for a new one
@@ -568,7 +569,7 @@ class Dolitmd extends DolibarrApi
             if (isset(self::STATES[(string) $state])) {
                 return self::STATES[(string) $state];
             }
-            throw new RestException(400, 'Bad state ' . $state . ': pending, subcontracted, done or invoiced');
+            throw new RestException(400, 'Bad state ' . $state . ': pending, subcontracted, done, invoiced or erroneous');
         }
         if (!array_key_exists('done', $data) && !array_key_exists('invoiced', $data)) {
             return null;
@@ -582,8 +583,8 @@ class Dolitmd extends DolibarrApi
             $invoiced = 0;
         }
 
-        if (!$done && $current !== null && (int) $current->status === Tmd::STATUS_SUBCONTRACTED) {
-            return Tmd::STATUS_SUBCONTRACTED;
+        if (!$done && $current !== null && in_array((int) $current->status, Tmd::STATES_ASIDE, true)) {
+            return (int) $current->status;
         }
 
         return $invoiced ? Tmd::STATUS_INVOICED : ($done ? Tmd::STATUS_DONE : Tmd::STATUS_PENDING);
@@ -593,7 +594,7 @@ class Dolitmd extends DolibarrApi
      * Name of a state
      *
      * @param  int    $status Status of the request
-     * @return string         pending, subcontracted, done or invoiced
+     * @return string         pending, subcontracted, done, invoiced or erroneous
      */
     private function stateName(int $status): string
     {
