@@ -506,7 +506,8 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * Load the request of a tracking number, in the entity of the page; never a deleted one
+     * Load the request of a tracking number, in the entity of the page; never a deleted one. The number of a request
+     * merged into another one gives that one (the link of its mails keeps working)
      *
      * @param  string $trackId Tracking number, as typed
      * @return int             > 0 if found, 0 if not
@@ -519,10 +520,17 @@ class Tmd extends SaturneObject
         if ($trackId === '') {
             return 0;
         }
-        $obj = $this->db->getRow('SELECT rowid FROM ' . $this->db->prefix() . $this->table_element . " WHERE track_id = '" . $this->db->escape($trackId) . "'"
-            . ' AND entity = ' . ((int) $conf->entity) . ' AND status >= 0');
+        $obj = $this->db->getRow('SELECT rowid, status FROM ' . $this->db->prefix() . $this->table_element . " WHERE track_id = '" . $this->db->escape($trackId) . "'"
+            . ' AND entity = ' . ((int) $conf->entity));
         if (!is_object($obj) || $this->fetch((int) $obj->rowid) <= 0) {
             return 0;
+        }
+        if ((int) $this->status < 0) {
+            require_once __DIR__ . '/tmdmerger.class.php';
+            $target = TmdMerger::mergedInto($this);
+            if ($target <= 0 || $this->fetch($target) <= 0 || (int) $this->status < 0) {
+                return 0;
+            }
         }
 
         return 1;
@@ -585,9 +593,10 @@ class Tmd extends SaturneObject
     /**
      * What the ticket of the request holds, read on the card: the mail of the request, then the messages of the ticket
      * (answers received, mails sent, notes), the oldest first. Each file of the ticket goes with the message saved
-     * just before it (the mail handler saves the attachments right after the message)
+     * just before it (the mail handler saves the attachments right after the message), the messages of a request merged
+     * into this one included (TmdMerger::merge())
      *
-     * @return array<int,array{code:string,title:string,date:int,message:string,files:array<int,array{name:string,size:int,path:string}>}> Empty without ticket
+     * @return array<int,array{id:int,code:string,title:string,date:int,message:string,files:array<int,array{name:string,size:int,path:string,fullname:string}>}> Empty without ticket; id: the event of the message, 0 for the mail of the request
      */
     public function getRequestThread(): array
     {
@@ -605,7 +614,7 @@ class Tmd extends SaturneObject
         }
 
         $sender  = (string) ($this->email_from ?: $ticket->origin_email);
-        $thread  = [['code' => 'dolitmd_request', 'title' => $sender !== '' ? $langs->trans('TmdRequestFrom', $sender) : $langs->trans('TmdRequestContent'), 'date' => (int) ($this->date_mail ?: $ticket->datec), 'message' => (string) $ticket->message, 'files' => []]];
+        $thread  = [['id' => 0, 'code' => 'dolitmd_request', 'title' => $sender !== '' ? $langs->trans('TmdRequestFrom', $sender) : $langs->trans('TmdRequestContent'), 'date' => (int) ($this->date_mail ?: $ticket->datec), 'message' => (string) $ticket->message, 'files' => []]];
         $created = [(int) $ticket->datec];
 
         // Label of a message: the subject of the ticket (cut after its first [...]), then who wrote it
@@ -629,22 +638,38 @@ class Tmd extends SaturneObject
                 }
                 $title = $users[$userId] !== '' ? $langs->trans('TmdThreadMessageBy', $users[$userId]) : $langs->trans('Message');
             }
-            $thread[]  = ['code' => strtolower((string) $obj->code), 'title' => $title, 'date' => (int) $this->db->jdate($obj->datep), 'message' => (string) $obj->note, 'files' => []];
+            $thread[]  = ['id' => (int) $obj->id, 'code' => strtolower((string) $obj->code), 'title' => $title, 'date' => (int) $this->db->jdate($obj->datep), 'message' => (string) $obj->note, 'files' => []];
             $created[] = (int) $this->db->jdate($obj->datec);
         }
 
+        // A file goes with its message, known by the index of the files (agenda_id: the attachments of an answer, the
+        // files of a message written from the ticket), else with the message created last before it: the messages are in
+        // the order of their mails, a request merged into this one brings messages created before the ones already there
         $baseDir = $conf->ticket->multidir_output[$ticket->entity ?? $conf->entity] ?? $conf->ticket->dir_output;
-        foreach (dol_dir_list($baseDir . '/' . dol_sanitizeFileName($ticket->ref), 'files', 0, '', '(\.meta|_preview.*\.png)$', 'date', SORT_ASC, 1) as $file) {
+        $dir     = $baseDir . '/' . dol_sanitizeFileName($ticket->ref);
+        $relDir  = trim((string) preg_replace('/^' . preg_quote(DOL_DATA_ROOT, '/') . '/', '', $dir), '/\\');
+        $events  = array_flip(array_filter(array_column($thread, 'id')));
+        $owners  = [];
+        $rows    = $this->db->getRows('SELECT filename, agenda_id FROM ' . $this->db->prefix() . "ecm_files WHERE filepath = '" . $this->db->escape($relDir) . "' AND agenda_id > 0 AND entity IN (" . getEntity('ecmfiles') . ') LIMIT 1000');
+        foreach (is_array($rows) ? $rows : [] as $obj) {
+            if (isset($events[(int) $obj->agenda_id])) {
+                $owners[(string) $obj->filename] = $events[(int) $obj->agenda_id];
+            }
+        }
+        foreach (dol_dir_list($dir, 'files', 0, '', '(\.meta|_preview.*\.png)$', 'date', SORT_ASC, 1) as $file) {
             if ($file['name'][0] === '.') {
                 continue;
             }
-            $index = 0;
-            foreach ($created as $i => $date) {
-                if ($date <= (int) $file['date']) {
+            $index = $owners[(string) $file['name']] ?? null;
+            $best  = PHP_INT_MIN;
+            foreach ($index === null ? $created : [] as $i => $date) {
+                if ($date <= (int) $file['date'] && $date >= $best) {
                     $index = $i;
+                    $best  = $date;
                 }
             }
-            $thread[$index]['files'][] = ['name' => (string) $file['name'], 'size' => (int) $file['size'], 'path' => dol_sanitizeFileName($ticket->ref) . '/' . $file['name']];
+            $index = $index ?? 0;
+            $thread[$index]['files'][] = ['name' => (string) $file['name'], 'size' => (int) $file['size'], 'path' => dol_sanitizeFileName($ticket->ref) . '/' . $file['name'], 'fullname' => (string) $file['fullname']];
         }
 
         return $thread;
