@@ -520,6 +520,22 @@ body#mainbody .dolitmd-sender-create {
     color: #fff;
   }
 
+  // Answer taken out as a request of its own: a discreet link after the title, the colour of the module on hover
+  .dolitmd-request-split {
+    display: inline-block;
+    margin-left: 10px;
+    font-size: .85em;
+    font-weight: normal;
+    white-space: nowrap;
+    color: var(--saturne-muted, #64748b);
+    text-decoration: none;
+
+    &:hover {
+      color: $dt-accent;
+      text-decoration: underline;
+    }
+  }
+
   // Answers quoting the whole thread: the text scrolls, the mail of the request is shown in full.
   // The date floats on the right a few pixels below the title, and a box that scrolls never goes under a float: it
   // shrank by the width of the date, so it starts below it
