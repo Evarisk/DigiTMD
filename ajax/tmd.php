@@ -145,11 +145,13 @@ if ($action == 'upload_files') {
         $events = (array) ($_SESSION['dol_events'] ?? []);
         unset($_SESSION['dol_events']);
     }
+    // Read again: the trigger of the files may have given its nomeref ID, the names of the files are checked against it
+    $object->fetch($object->id);
     dolitmd_ajax_reply(200, [
         'success' => $result > 0,
         'events'  => $events,
-        'files'   => array_map(static function (array $file): string {
-            return dolitmd_done_file_html($file, true);
+        'files'   => array_map(static function (array $file) use ($object): string {
+            return dolitmd_done_file_html($file, true, $object);
         }, $added),
     ]);
 }

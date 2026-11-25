@@ -209,6 +209,9 @@ class TmdMerger
         }
 
         $ok = $ok && $target->update($user) > 0;
+        // Its ticket is left to the merge (given to the request kept, or cancelled below after a note), never cancelled
+        // by the deletion
+        $source->context['dolitmd_merge'] = 1;
         $ok = $ok && $source->delete($user) > 0;
         if (!$ok) {
             $this->error  = $this->error ?: ($target->error ?: ($source->error ?: $this->db->lasterror()));

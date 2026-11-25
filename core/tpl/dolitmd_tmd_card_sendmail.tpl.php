@@ -57,7 +57,8 @@ print '<input type="text" name="subject" class="quatrevingtpercent" value="' . d
 print '</td></tr>';
 
 // The documents of the request (tab Documents): all of them ticked for « request done », none for a message; the files
-// dropped on the card while the form is open are added to the list, ticked (js/modules/tmd.js)
+// dropped on the card while the form is open are added to the list, ticked (js/modules/tmd.js). A name that does not
+// match the nomeref ID of the request is warned, never refused
 print '<tr><td class="tdtop">' . $langs->trans('MailFile') . '</td><td>';
 $publicFiles = $object->getPublicFiles();
 print '<div class="dolitmd-sendmail-files">';
@@ -65,7 +66,7 @@ if (empty($publicFiles)) {
     print '<span class="opacitymedium dolitmd-sendmail-nofile">' . $langs->trans('TmdSendDoneNoDocument') . '</span> ';
 }
 foreach ($publicFiles as $file) {
-    print dolitmd_done_file_html($file, in_array($file['name'], (array) $mailForm['files'], true));
+    print dolitmd_done_file_html($file, in_array($file['name'], (array) $mailForm['files'], true), $object);
 }
 print '</div>';
 print '<a class="small" href="' . dol_escape_htmltag(dol_buildpath('/saturne/view/saturne_document.php', 1) . '?id=' . $object->id . '&module_name=DoliTMD&object_type=tmd') . '">' . img_picto('', 'file', 'class="pictofixedwidth"') . $langs->trans('TmdSendDoneAddDocument') . '</a>';

@@ -81,8 +81,8 @@ class Tmd extends SaturneObject
 
     /**
      * The state is given by the two ticks: invoiced wins over done. Neither ticked: pending, or subcontracted when chosen
-     * so (the request is handled by a subcontractor: greyed in the list, never late), or erroneous when chosen so (a
-     * mail that is no request: greyed in the list, never late nor invoiced, its ticket cancelled)
+     * so (the request is handled by a subcontractor: greyed in the list, never late, its ticket closed), or erroneous
+     * when chosen so (a mail that is no request: greyed in the list, never late nor invoiced, its ticket cancelled)
      */
     public const STATUS_DELETED       = -1;
     public const STATUS_PENDING       = 0;
@@ -734,7 +734,8 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * Under the banner of the tab Documents (saturne_document.php): its files are seen by the customer
+     * Under the banner of the tab Documents (saturne_document.php): its files are seen by the customer, and the ones
+     * whose name does not match the nomeref ID of the request (getMismatchedDocuments())
      *
      * @param  int    $id Id of the request
      * @return string
@@ -746,14 +747,21 @@ class Tmd extends SaturneObject
         if (strpos($_SERVER['PHP_SELF'] ?? '', 'saturne_document.php') === false || $this->id <= 0) {
             return '';
         }
-        $url = $this->getPublicUrl();
-        if ($url === '') {
-            return '';
-        }
         $langs->load('dolitmd@dolitmd');
+        require_once __DIR__ . '/../lib/dolitmd.lib.php';
 
-        return '<div class="dolitmd-documents-notice"><i class="fas fa-globe pictofixedwidth"></i>' . $langs->trans('TmdPublicDocumentsNotice')
-            . ' <a href="' . dol_escape_htmltag($url) . '" target="_blank" rel="noopener">' . $langs->trans('TmdPublicOpen') . '</a></div>';
+        $out = '';
+        $url = $this->getPublicUrl();
+        if ($url !== '') {
+            $out .= '<div class="dolitmd-documents-notice"><i class="fas fa-globe pictofixedwidth"></i>' . $langs->trans('TmdPublicDocumentsNotice')
+                . ' <a href="' . dol_escape_htmltag($url) . '" target="_blank" rel="noopener">' . $langs->trans('TmdPublicOpen') . '</a></div>';
+        }
+        // A document just added with the nomeref ID of another request, or of another site of the customer
+        foreach ($this->getMismatchedDocuments() as $fileName) {
+            $out .= dolitmd_document_mismatch_html($this, $fileName);
+        }
+
+        return $out;
     }
 
     /**
@@ -774,11 +782,13 @@ class Tmd extends SaturneObject
         $this->category = self::normalizeCategory($this->category);
 
         $result = parent::update($user, $noTrigger);
-        // Done now, erroneous now, or pending again: the ticket follows (closed as solved, cancelled, opened again).
-        // Never a mail: the mail « request done » leaves from the button of the card only (TmdMailer::sendCardMail()),
-        // once read again
-        $erroneous = (int) $this->status === self::STATUS_ERRONEOUS;
-        if ($result > 0 && is_object($before) && ((int) $before->done !== (int) $this->done || ((int) $before->status === self::STATUS_ERRONEOUS) !== $erroneous)) {
+        // Done now or not any more, set aside now (subcontracted, erroneous) or not any more: the ticket follows (closed
+        // as solved, cancelled, opened again). Done to invoiced and back leave it as it is. Never a mail: the mail
+        // « request done » leaves from the button of the card only (TmdMailer::sendCardMail()), once read again
+        $aside = static function ($status): int {
+            return in_array((int) $status, self::STATES_ASIDE, true) ? (int) $status : self::STATUS_PENDING;
+        };
+        if ($result > 0 && is_object($before) && ((int) $before->done !== (int) $this->done || $aside($before->status) !== $aside($this->status))) {
             $this->syncTicket($user);
         }
 
@@ -786,9 +796,36 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * The ticket of the request follows it: closed as solved when the request is done, cancelled when it is erroneous,
-     * opened again when it is pending or subcontracted again (as the button « Reopen » of the ticket: assigned when it
-     * has someone, else not read)
+     * Delete the request (soft by default): its ticket is cancelled, without mail, as the one of an erroneous request
+     *
+     * @param  User     $user       User deleting
+     * @param  int<0,1> $noTrigger  0 = launch triggers after, 1 = disable triggers
+     * @param  bool     $softDelete True = status deleted (-1), false = row deleted
+     * @return int                  Return integer < 0 if KO, > 0 if OK
+     */
+    public function delete(User $user, int $noTrigger = 0, bool $softDelete = true): int
+    {
+        $result = parent::delete($user, $noTrigger, $softDelete);
+        // A request merged into another one: TmdMerger::merge() gives its ticket to the request kept, or cancels it
+        // itself after a note
+        if ($result > 0 && empty($this->context['dolitmd_merge'])) {
+            $this->status = self::STATUS_DELETED;
+            // The card and the list delete through the core, then redirect: closing the ticket prints warnings of the
+            // core 24 (Ticket::listeContact), never before the redirect
+            ob_start();
+            $this->syncTicket($user);
+            ob_end_clean();
+        }
+
+        return $result;
+    }
+
+    /**
+     * The ticket of the request follows it: closed as solved when the request is done or subcontracted (the
+     * subcontractor answers the customer, the mailbox TMD in copy: nothing left to do here; its answer still lands in
+     * the thread), cancelled when it is erroneous or deleted, opened again when it is pending again (as the button
+     * « Reopen » of the ticket: assigned when it has someone, else not read). A ticket already closed or cancelled
+     * stays so
      *
      * @param  User $user User changing the request
      * @return void
@@ -804,10 +841,10 @@ class Tmd extends SaturneObject
         if ($ticket->fetch((int) $this->fk_ticket) <= 0) {
             return;
         }
-        if ($this->done) {
-            $result = $ticket->close($user, 0);
-        } elseif ((int) $this->status === self::STATUS_ERRONEOUS) {
+        if (in_array((int) $this->status, [self::STATUS_ERRONEOUS, self::STATUS_DELETED], true)) {
             $result = $ticket->close($user, 1);
+        } elseif ($this->done || (int) $this->status === self::STATUS_SUBCONTRACTED) {
+            $result = $ticket->close($user, 0);
         } elseif (in_array((int) $ticket->status, [Ticket::STATUS_CLOSED, Ticket::STATUS_CANCELED], true)) {
             $result = $ticket->setStatut($ticket->fk_user_assign > 0 ? Ticket::STATUS_ASSIGNED : Ticket::STATUS_NOT_READ, null, '', 'TICKET_MODIFY');
         } else {
@@ -1062,9 +1099,68 @@ class Tmd extends SaturneObject
      */
     public static function softwareIdFromFileName(string $fileName): string
     {
-        $pattern = '/(?<![A-Za-z0-9])[' . self::SOFTWARE_REF_PREFIXES . '][A-Z]?\d{5,}(?![0-9])/i';
+        return self::softwareRefParts(pathinfo($fileName, PATHINFO_FILENAME))['id'];
+    }
 
-        return preg_match($pattern, pathinfo($fileName, PATHINFO_FILENAME), $matches) ? strtoupper($matches[0]) : '';
+    /**
+     * Prefix and number of a nomeref ID, or of the name of a document without its extension: the first word (the site
+     * of the customer, « PB2 ») and the ID (softwareIdFromFileName(), « X1667682 »). No prefix when the first word is
+     * the ID itself (« EV00001672 », « X1667682 ADR.pdf »)
+     *
+     * @param  string $text nomeref ID, or name of a file without its extension
+     * @return array{prefix:string,id:string} In upper case, empty when absent
+     */
+    public static function softwareRefParts(string $text): array
+    {
+        $pattern = '/(?<![A-Za-z0-9])[' . self::SOFTWARE_REF_PREFIXES . '][A-Z]?\d{5,}(?![0-9])/i';
+        $text    = trim((string) preg_replace('/[\s_]+/u', ' ', $text));
+        $id      = preg_match($pattern, $text, $matches) ? strtoupper($matches[0]) : '';
+        $first   = explode(' ', $text)[0];
+
+        return ['prefix' => $first !== '' && strcasecmp($first, $id) !== 0 ? dol_strtoupper($first) : '', 'id' => $id];
+    }
+
+    /**
+     * The name of a document with a nomeref ID does not match the nomeref ID of the request: another prefix (first
+     * word: « SITE-A ADR … » for « SITE-B ADR … ») or another number. Never when the request has no nomeref ID, nor for
+     * a name without one; a prefix or a number missing on one side is not compared
+     *
+     * @param  string $softwareRef nomeref ID of the request
+     * @param  string $fileName    Name of the file
+     * @return bool
+     */
+    public static function documentMismatchesSoftwareRef(string $softwareRef, string $fileName): bool
+    {
+        $document = self::softwareRefParts(pathinfo($fileName, PATHINFO_FILENAME));
+        if (trim($softwareRef) === '' || $document['id'] === '') {
+            return false;
+        }
+        $request = self::softwareRefParts($softwareRef);
+
+        return ($request['id'] !== '' && $request['id'] !== $document['id'])
+            || ($request['prefix'] !== '' && $document['prefix'] !== '' && $request['prefix'] !== $document['prefix']);
+    }
+
+    /**
+     * Documents of the tab Documents whose name does not match the nomeref ID of the request
+     * (documentMismatchesSoftwareRef()): warned on the card, the tab Documents and the mail to the customer, never
+     * refused (another name may be wanted)
+     *
+     * @return string[] Names of the files
+     */
+    public function getMismatchedDocuments(): array
+    {
+        $names = [];
+        if ((int) $this->status === self::STATUS_DELETED) {
+            return $names;
+        }
+        foreach ($this->getPublicFiles() as $file) {
+            if (self::documentMismatchesSoftwareRef((string) $this->software_ref, $file['name'])) {
+                $names[] = $file['name'];
+            }
+        }
+
+        return $names;
     }
 
     /**
