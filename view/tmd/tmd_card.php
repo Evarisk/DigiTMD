@@ -180,6 +180,32 @@ if (empty($resHook)) {
         $action = '';
     }
 
+    // Every attachment of a message of the thread at once (0: the mail of the request), in a ZIP archive made for the
+    // download then removed (the files of the ticket: for those who may read the tickets, as each file of the thread)
+    if ($action == 'downloadall' && $object->id > 0 && $user->hasRight('ticket', 'read')) {
+        $tempDir = (string) ($conf->dolitmd->dir_temp ?? (DOL_DATA_ROOT . '/dolitmd/temp'));
+        $zipPath = $tempDir . '/' . dol_sanitizeFileName($object->ref) . '-' . dol_now() . '-' . $user->id . '.zip';
+        $added   = dol_mkdir($tempDir) >= 0 ? $object->zipRequestFiles($zipPath, GETPOSTINT('messageid')) : -1;
+        if ($added > 0) {
+            $zipName = dol_sanitizeFileName($object->ref . '-' . $langs->transnoentities('TmdAttachmentsZip') . '.zip');
+            // Nothing before the archive: an output kept in a buffer would break it
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            header('Content-Type: application/zip');
+            header('Content-Disposition: attachment; filename="' . $zipName . '"');
+            header('Content-Length: ' . filesize($zipPath));
+            header('Cache-Control: private, no-store');
+            readfile($zipPath);
+            dol_delete_file($zipPath);
+            exit;
+        }
+        dol_delete_file($zipPath);
+        setEventMessages($added === 0 ? $langs->trans('TmdNoAttachment') : $langs->trans('TmdZipError', $object->error), null, $added === 0 ? 'warnings' : 'errors');
+        header('Location: ' . $_SERVER['PHP_SELF'] . '?id=' . $object->id);
+        exit;
+    }
+
     // A document of the line « Attached files » deleted once confirmed, as the tab Documents deletes it: the file, its
     // thumbnails and its index (only its name is read, never a path)
     if (in_array($action, ['deletefile', 'confirm_deletefile'], true) && $permissiontoadd && $object->id > 0) {
