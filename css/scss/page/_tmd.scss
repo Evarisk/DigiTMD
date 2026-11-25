@@ -556,6 +556,32 @@ body#mainbody .dolitmd-sender-create {
     }
   }
 
+  // « Download all » of a message: on its own line above its tiles, a small button bordered as the tiles
+  .dolitmd-request-files-actions {
+    grid-column: 1 / -1;
+  }
+
+  .dolitmd-download-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    border: 1px solid var(--saturne-border, #e2e8f0);
+    border-radius: var(--saturne-radius, 8px);
+    background: #fff;
+    color: var(--saturne-text-soft, #475569);
+    font-size: .9em;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: border-color .15s, color .15s;
+
+    &:hover {
+      border-color: $dt-accent;
+      color: $dt-accent;
+      text-decoration: none;
+    }
+  }
+
   // Answers quoting the whole thread: the text scrolls, the mail of the request is shown in full.
   // The date floats on the right a few pixels below the title, and a box that scrolls never goes under a float: it
   // shrank by the width of the date, so it starts below it
