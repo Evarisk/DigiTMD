@@ -261,8 +261,8 @@ class Dolitmd extends DolibarrApi
     /**
      * Change the state of a TMD request: pending, subcontracted, done, invoiced or erroneous
      *
-     * As the state chosen in the list: the ticket of the request is closed (done), cancelled (erroneous) or opened again
-     * (pending). No mail leaves: the mail « request done » is sent by POST {id}/senddone.
+     * As the state chosen in the list: the ticket of the request is closed (done, subcontracted), cancelled (erroneous)
+     * or opened again (pending). No mail leaves: the mail « request done » is sent by POST {id}/senddone.
      *
      * Example: { "state": "done" }
      *
@@ -425,6 +425,8 @@ class Dolitmd extends DolibarrApi
 
     /**
      * Delete a TMD request
+     *
+     * Its ticket is cancelled, without mail.
      *
      * @param  int   $id ID of the request
      * @return array

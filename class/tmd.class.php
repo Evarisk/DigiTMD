@@ -81,8 +81,8 @@ class Tmd extends SaturneObject
 
     /**
      * The state is given by the two ticks: invoiced wins over done. Neither ticked: pending, or subcontracted when chosen
-     * so (the request is handled by a subcontractor: greyed in the list, never late), or erroneous when chosen so (a
-     * mail that is no request: greyed in the list, never late nor invoiced, its ticket cancelled)
+     * so (the request is handled by a subcontractor: greyed in the list, never late, its ticket closed), or erroneous
+     * when chosen so (a mail that is no request: greyed in the list, never late nor invoiced, its ticket cancelled)
      */
     public const STATUS_DELETED       = -1;
     public const STATUS_PENDING       = 0;
@@ -774,11 +774,13 @@ class Tmd extends SaturneObject
         $this->category = self::normalizeCategory($this->category);
 
         $result = parent::update($user, $noTrigger);
-        // Done now, erroneous now, or pending again: the ticket follows (closed as solved, cancelled, opened again).
-        // Never a mail: the mail « request done » leaves from the button of the card only (TmdMailer::sendCardMail()),
-        // once read again
-        $erroneous = (int) $this->status === self::STATUS_ERRONEOUS;
-        if ($result > 0 && is_object($before) && ((int) $before->done !== (int) $this->done || ((int) $before->status === self::STATUS_ERRONEOUS) !== $erroneous)) {
+        // Done now or not any more, set aside now (subcontracted, erroneous) or not any more: the ticket follows (closed
+        // as solved, cancelled, opened again). Done to invoiced and back leave it as it is. Never a mail: the mail
+        // « request done » leaves from the button of the card only (TmdMailer::sendCardMail()), once read again
+        $aside = static function ($status): int {
+            return in_array((int) $status, self::STATES_ASIDE, true) ? (int) $status : self::STATUS_PENDING;
+        };
+        if ($result > 0 && is_object($before) && ((int) $before->done !== (int) $this->done || $aside($before->status) !== $aside($this->status))) {
             $this->syncTicket($user);
         }
 
@@ -786,9 +788,36 @@ class Tmd extends SaturneObject
     }
 
     /**
-     * The ticket of the request follows it: closed as solved when the request is done, cancelled when it is erroneous,
-     * opened again when it is pending or subcontracted again (as the button « Reopen » of the ticket: assigned when it
-     * has someone, else not read)
+     * Delete the request (soft by default): its ticket is cancelled, without mail, as the one of an erroneous request
+     *
+     * @param  User     $user       User deleting
+     * @param  int<0,1> $noTrigger  0 = launch triggers after, 1 = disable triggers
+     * @param  bool     $softDelete True = status deleted (-1), false = row deleted
+     * @return int                  Return integer < 0 if KO, > 0 if OK
+     */
+    public function delete(User $user, int $noTrigger = 0, bool $softDelete = true): int
+    {
+        $result = parent::delete($user, $noTrigger, $softDelete);
+        // A request merged into another one: TmdMerger::merge() gives its ticket to the request kept, or cancels it
+        // itself after a note
+        if ($result > 0 && empty($this->context['dolitmd_merge'])) {
+            $this->status = self::STATUS_DELETED;
+            // The card and the list delete through the core, then redirect: closing the ticket prints warnings of the
+            // core 24 (Ticket::listeContact), never before the redirect
+            ob_start();
+            $this->syncTicket($user);
+            ob_end_clean();
+        }
+
+        return $result;
+    }
+
+    /**
+     * The ticket of the request follows it: closed as solved when the request is done or subcontracted (the
+     * subcontractor answers the customer, the mailbox TMD in copy: nothing left to do here; its answer still lands in
+     * the thread), cancelled when it is erroneous or deleted, opened again when it is pending again (as the button
+     * « Reopen » of the ticket: assigned when it has someone, else not read). A ticket already closed or cancelled
+     * stays so
      *
      * @param  User $user User changing the request
      * @return void
@@ -804,10 +833,10 @@ class Tmd extends SaturneObject
         if ($ticket->fetch((int) $this->fk_ticket) <= 0) {
             return;
         }
-        if ($this->done) {
-            $result = $ticket->close($user, 0);
-        } elseif ((int) $this->status === self::STATUS_ERRONEOUS) {
+        if (in_array((int) $this->status, [self::STATUS_ERRONEOUS, self::STATUS_DELETED], true)) {
             $result = $ticket->close($user, 1);
+        } elseif ($this->done || (int) $this->status === self::STATUS_SUBCONTRACTED) {
+            $result = $ticket->close($user, 0);
         } elseif (in_array((int) $ticket->status, [Ticket::STATUS_CLOSED, Ticket::STATUS_CANCELED], true)) {
             $result = $ticket->setStatut($ticket->fk_user_assign > 0 ? Ticket::STATUS_ASSIGNED : Ticket::STATUS_NOT_READ, null, '', 'TICKET_MODIFY');
         } else {
