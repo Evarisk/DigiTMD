@@ -158,6 +158,22 @@ objet (et l'expéditeur, colonne à ajouter ; sans tiers connu, l'adresse s'affi
 
 Une demande peut aussi être saisie à la main (Nouvelle demande TMD).
 
+### Statistiques TMD
+
+Menu DoliTMD → Statistiques TMD, dans le design de la page d'accueil de ReedCRM. Période : mois, trimestre ou année en
+cours (le mois par défaut), comparée à la période précédente au même avancement.
+
+- **Chiffres clés** (chaque tuile ouvre la liste derrière son chiffre) : demandes reçues (date du mail, dont en
+  sous-traitance, erronées à part), demandes traitées (passées à Fait, délai moyen et médian du mail à Fait), part
+  traitée au plus tard le jour de l'échéance (et les demandes en retard aujourd'hui), à facturer aujourd'hui.
+- **Demandes reçues sur 12 mois**, à côté des mêmes mois un an plus tôt (détail au survol et en tableau).
+- **État** et **catégories** des demandes reçues sur la période, **délais de traitement** par tranches de jours.
+- **En retard aujourd'hui**, **clients les plus demandeurs** (reçues, traitées, délai moyen, à facturer),
+  **dernières demandes traitées** (qui, quand).
+
+Les demandes erronées sont comptées à part, jamais dans les autres chiffres ; les demandes supprimées (et donc
+fusionnées) ne comptent jamais.
+
 ### Configuration
 
 Configuration > Modules > DoliTMD : la boîte mail des demandes TMD et les personnes à qui les tickets sont attribués.
