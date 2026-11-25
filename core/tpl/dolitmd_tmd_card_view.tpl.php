@@ -31,7 +31,8 @@ saturne_banner_tab($object);
 
 $formConfirm = '';
 if ($action == 'delete') {
-    $formConfirm = $form->formconfirm($_SERVER['PHP_SELF'] . '?id=' . $object->id, $langs->trans('DeleteObject', $langs->transnoentities('TheTmd')), $langs->trans('ConfirmDeleteObject', $langs->transnoentities('TheTmd')), 'confirm_delete', '', 'yes', 1);
+    // Its ticket is cancelled with it (Tmd::delete())
+    $formConfirm = $form->formconfirm($_SERVER['PHP_SELF'] . '?id=' . $object->id, $langs->trans('DeleteObject', $langs->transnoentities('TheTmd')), $langs->trans('TmdConfirmDelete', dol_escape_htmltag($object->ref)), 'confirm_delete', '', 'yes', 1);
 } elseif ($action == 'deletefile' && $fileToDelete !== '') {
     // A document of the line « Attached files », deleted once confirmed (action confirm_deletefile of the card)
     $formConfirm = $form->formconfirm($_SERVER['PHP_SELF'] . '?id=' . $object->id . '&urlfile=' . urlencode($fileToDelete), $langs->trans('TmdDeleteDocument'), $langs->trans('TmdConfirmDeleteDocument', dol_escape_htmltag($fileToDelete)), 'confirm_deletefile', '', 'yes', 1);
@@ -58,6 +59,12 @@ if (empty($resHook)) {
     $formConfirm = $hookmanager->resPrint;
 }
 print $formConfirm;
+
+// A document of the tab Documents with the nomeref ID of another request, or of another site of the customer: warned,
+// never refused (another name may be wanted)
+foreach ($object->getMismatchedDocuments() as $fileName) {
+    print dolitmd_document_mismatch_html($object, $fileName);
+}
 
 print '<div class="fichecenter">';
 print '<div class="fichehalfleft">';
