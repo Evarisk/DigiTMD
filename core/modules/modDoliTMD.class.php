@@ -249,6 +249,21 @@ class modDoliTMD extends DolibarrModules
             'target'   => '',
             'user'     => 0,
         ];
+        $this->menu[$r++] = [
+            'fk_menu'  => 'fk_mainmenu=dolitmd',
+            'type'     => 'left',
+            'titre'    => 'TmdStats',
+            'prefix'   => '<i class="fas fa-chart-bar pictofixedwidth"></i>',
+            'mainmenu' => 'dolitmd',
+            'leftmenu' => 'tmd_stats',
+            'url'      => '/dolitmd/view/tmd/tmd_stats.php',
+            'langs'    => 'dolitmd@dolitmd',
+            'position' => 1000 + $r,
+            'enabled'  => 'isModEnabled("dolitmd")',
+            'perms'    => '$user->hasRight("dolitmd", "tmd", "read")',
+            'target'   => '',
+            'user'     => 0,
+        ];
     }
 
     /**

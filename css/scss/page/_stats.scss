@@ -1,0 +1,829 @@
+/* Statistics of the TMD requests (view/tmd/tmd_stats.php), in the design of the home page of ReedCRM: period toolbar,
+   key figure tiles and the cards below them. */
+
+/* One accent per figure, and a single blue for the data: the last twelve months in full, the year before in grey. */
+$stats-ink:       #1d2433;
+$stats-muted:     #6b7486;
+$stats-line:      rgba(29, 36, 51, .09);
+$stats-surface:   #fff;
+$stats-soft:      #f5f7fa;
+$stats-data:      #2a78d6;
+$stats-previous:  #c7ccd4;
+$stats-alert:     #c0392b;
+$stats-up:        #2e9e6b;
+$stats-tones: (
+  received: #e67e22,
+  done:     #1baf7a,
+  delay:    #2a78d6,
+  invoice:  #6250d6
+);
+// The bars of the cards: a colour per state (as their badges), per category, one for the processing times
+$stats-fills: (
+  pending:       #e9a00d,
+  subcontracted: #8e44ad,
+  done:          #1baf7a,
+  invoiced:      #2a78d6,
+  adr:           #e67e22,
+  iata:          #2a78d6,
+  imdg:          #1abc9c,
+  none:          #c7ccd4,
+  delay:         #1abc9c
+);
+
+.dolitmd-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+  color: $stats-ink;
+}
+
+/* Period: plain links, the page is read again with its new period */
+.dolitmd-stats__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.dolitmd-stats__range {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: $stats-muted;
+}
+
+.dolitmd-stats-segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: $stats-soft;
+  border: 1px solid $stats-line;
+
+  .dolitmd-stats-segmented__item {
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: $stats-muted;
+    text-decoration: none;
+    white-space: nowrap;
+
+    &:hover {
+      color: $stats-ink;
+    }
+
+    &.is-active {
+      color: $stats-ink;
+      background: $stats-surface;
+      box-shadow: 0 1px 2px rgba(29, 36, 51, .12);
+    }
+  }
+}
+
+/* Key figures: one tile per question, the whole tile opens the list behind the figure */
+.dolitmd-stats__kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+
+  @media (max-width: 1200px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 600px) {
+    gap: 10px;
+  }
+}
+
+.dolitmd-stats-kpi {
+  --stats-tone: #{$stats-data};
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid $stats-line;
+  border-radius: 10px;
+  background: $stats-surface;
+  color: $stats-ink;
+  text-decoration: none;
+  transition: border-color .15s, box-shadow .15s;
+
+  &:hover {
+    border-color: var(--stats-tone);
+    box-shadow: 0 2px 10px rgba(29, 36, 51, .08);
+    text-decoration: none;
+  }
+
+  @each $tone, $color in $stats-tones {
+    &.dolitmd-stats-kpi--#{$tone} {
+      --stats-tone: #{$color};
+    }
+  }
+
+  .dolitmd-stats-kpi__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .dolitmd-stats-kpi__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    color: var(--stats-tone);
+    background: color-mix(in srgb, var(--stats-tone) 12%, transparent);
+  }
+
+  .dolitmd-stats-kpi__title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    color: $stats-muted;
+  }
+
+  .dolitmd-stats-kpi__value {
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dolitmd-stats-kpi__trend {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .dolitmd-stats-kpi__compare,
+  .dolitmd-stats-kpi__detail {
+    font-size: 12.5px;
+    color: $stats-muted;
+  }
+
+  .dolitmd-stats-kpi__alert {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: $stats-alert;
+  }
+
+  // Two tiles a row on a phone: the figure shrinks rather than the tiles piling up
+  @media (max-width: 600px) {
+    padding: 12px;
+
+    .dolitmd-stats-kpi__icon {
+      display: none;
+    }
+
+    .dolitmd-stats-kpi__title {
+      font-size: 11px;
+    }
+
+    .dolitmd-stats-kpi__value {
+      font-size: 20px;
+    }
+  }
+}
+
+/* Change against the period before */
+.dolitmd-stats-evolution {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: .85em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  &.dolitmd-stats-evolution--up {
+    color: $stats-up;
+    background: rgba($stats-up, .12);
+  }
+
+  &.dolitmd-stats-evolution--down {
+    color: $stats-alert;
+    background: rgba($stats-alert, .12);
+  }
+
+  &.dolitmd-stats-evolution--flat {
+    color: inherit;
+    background: rgba(0, 0, 0, .08);
+  }
+}
+
+/* Cards: twelve columns, the chart and the states side by side, then three cards, then two */
+.dolitmd-stats__grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dolitmd-stats-card {
+  grid-column: span 12;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid $stats-line;
+  border-radius: 10px;
+  background: $stats-surface;
+
+  &.dolitmd-stats-card--wide {
+    grid-column: span 8;
+  }
+
+  &.dolitmd-stats-card--narrow,
+  &.dolitmd-stats-card--third {
+    grid-column: span 4;
+  }
+
+  &.dolitmd-stats-card--half {
+    grid-column: span 6;
+  }
+
+  @media (max-width: 1200px) {
+    &.dolitmd-stats-card--wide,
+    &.dolitmd-stats-card--narrow,
+    &.dolitmd-stats-card--half {
+      grid-column: span 12;
+    }
+
+    &.dolitmd-stats-card--third {
+      grid-column: span 6;
+    }
+  }
+
+  @media (max-width: 767px) {
+    &.dolitmd-stats-card--third {
+      grid-column: span 12;
+    }
+  }
+
+  .dolitmd-stats-card__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+  }
+
+  .dolitmd-stats-card__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: $stats-ink;
+
+    i {
+      color: $stats-muted;
+    }
+  }
+
+  .dolitmd-stats-card__figure {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 17px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dolitmd-stats-card__count {
+    padding: 0 8px;
+    border-radius: 10px;
+    background: $stats-soft;
+    border: 1px solid $stats-line;
+    font-size: 12px;
+    font-weight: 600;
+    color: $stats-muted;
+  }
+
+  .dolitmd-stats-card__more {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+
+    i {
+      font-size: .85em;
+    }
+  }
+
+  .dolitmd-stats-card__footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid $stats-line;
+    font-size: 12.5px;
+    color: $stats-muted;
+
+    a {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    &.dolitmd-stats-card__footer--alert a {
+      font-weight: 600;
+      color: $stats-alert;
+    }
+  }
+}
+
+.dolitmd-stats-empty {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 4px;
+  font-size: 13px;
+  color: $stats-muted;
+}
+
+.dolitmd-stats-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 12px;
+  color: $stats-muted;
+
+  .dolitmd-stats-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    &:before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    &.dolitmd-stats-legend__item--current:before {
+      background: $stats-data;
+    }
+
+    &.dolitmd-stats-legend__item--previous:before {
+      background: $stats-previous;
+    }
+  }
+}
+
+/* Chart: the bars are drawn in a stretched SVG, the axis and the months in HTML so their text keeps its size.
+   The plot grows with its card, as high as the states next to it. */
+.dolitmd-stats-chart {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-rows: minmax(220px, 1fr) auto;
+  row-gap: 6px;
+
+  .dolitmd-stats-chart__ticks {
+    position: relative;
+  }
+
+  .dolitmd-stats-chart__tick {
+    position: absolute;
+    right: 10px;
+    font-size: 11px;
+    color: $stats-muted;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    transform: translateY(-50%);
+
+    @for $i from 1 through 5 {
+      &:nth-child(#{$i}) {
+        top: ($i - 1) * 25%;
+      }
+    }
+  }
+
+  .dolitmd-stats-chart__plot {
+    position: relative;
+    border-bottom: 1px solid rgba(29, 36, 51, .25);
+    background-image: linear-gradient(to bottom, $stats-line 1px, transparent 1px);
+    background-size: 100% 25%;
+  }
+
+  .dolitmd-stats-chart__bars {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .dolitmd-stats-chart__bar--current {
+    fill: $stats-data;
+  }
+
+  .dolitmd-stats-chart__bar--previous {
+    fill: $stats-previous;
+  }
+
+  .dolitmd-stats-chart__hit {
+    fill: transparent;
+    cursor: default;
+
+    &.is-hovered {
+      fill: rgba(29, 36, 51, .05);
+    }
+  }
+
+  .dolitmd-stats-chart__months {
+    grid-column: 2;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    font-size: 11.5px;
+    color: $stats-muted;
+    text-align: center;
+    text-transform: capitalize;
+  }
+
+  .dolitmd-stats-chart__tooltip {
+    position: absolute;
+    top: 8px;
+    z-index: 5;
+    min-width: 170px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: $stats-ink;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.5;
+    pointer-events: none;
+    box-shadow: 0 4px 14px rgba(29, 36, 51, .2);
+    transform: translateX(-50%);
+
+    strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .dolitmd-stats-chart__tooltip-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .dolitmd-stats-chart__tooltip-key {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      opacity: .8;
+
+      &:before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        background: $stats-data;
+      }
+
+      &.dolitmd-stats-chart__tooltip-key--previous:before {
+        background: $stats-previous;
+      }
+    }
+  }
+
+  @media (max-width: 600px) {
+    grid-template-columns: 36px minmax(0, 1fr);
+
+    .dolitmd-stats-chart__months span:nth-child(even) {
+      visibility: hidden;
+    }
+  }
+}
+
+.dolitmd-stats-chart__table {
+  font-size: 12.5px;
+
+  summary {
+    cursor: pointer;
+    color: $stats-muted;
+  }
+
+  table {
+    margin-top: 8px;
+  }
+}
+
+/* Bars: one row per state, category or bucket, its figure on the right, its bar below */
+.dolitmd-stats-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  .dolitmd-stats-bars__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 4px 12px;
+    padding: 8px 6px;
+    border-radius: 8px;
+    color: $stats-ink;
+    text-decoration: none;
+  }
+
+  a.dolitmd-stats-bars__row:hover {
+    background: $stats-soft;
+    text-decoration: none;
+  }
+
+  .dolitmd-stats-bars__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 500;
+
+    i {
+      width: 16px;
+      text-align: center;
+      color: $stats-muted;
+    }
+  }
+
+  .dolitmd-stats-bars__value {
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .dolitmd-stats-bars__bar {
+    grid-column: 1 / -1;
+    display: block;
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: $stats-soft;
+  }
+
+  .dolitmd-stats-bars__fill {
+    fill: $stats-data;
+
+    @each $fill, $color in $stats-fills {
+      &.dolitmd-stats-bars__fill--#{$fill} {
+        fill: $color;
+      }
+    }
+  }
+}
+
+/* Short lists: what and for whom on the left, the figure on the right */
+.dolitmd-stats-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  .dolitmd-stats-list__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-top: 1px solid $stats-line;
+
+    &:first-child {
+      border-top: 0;
+      padding-top: 2px;
+    }
+  }
+
+  .dolitmd-stats-list__main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .dolitmd-stats-list__title {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dolitmd-stats-list__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 10px;
+    font-size: 12px;
+    color: $stats-muted;
+
+    a {
+      color: inherit;
+    }
+  }
+
+  .dolitmd-stats-list__subject {
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dolitmd-stats-list__date {
+    white-space: nowrap;
+  }
+
+  .dolitmd-stats-list__value {
+    flex: 0 0 auto;
+    font-size: 13.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: $stats-ink;
+
+    &.dolitmd-stats-list__value--alert {
+      padding: 1px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+      color: $stats-alert;
+      background: rgba($stats-alert, .1);
+    }
+  }
+}
+
+/* Last requests done: a timeline with the category of the request as its marker */
+.dolitmd-stats-feed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  .dolitmd-stats-feed__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 9px 0;
+    border-top: 1px solid $stats-line;
+
+    &:first-child {
+      border-top: 0;
+      padding-top: 2px;
+    }
+  }
+
+  .dolitmd-stats-feed__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba($stats-data, .1);
+    color: $stats-data;
+    font-size: 12px;
+  }
+
+  .dolitmd-stats-feed__main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .dolitmd-stats-feed__label {
+    font-size: 13px;
+    font-weight: 600;
+    color: $stats-ink;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dolitmd-stats-feed__subject {
+    margin-left: 8px;
+    font-weight: 400;
+    color: $stats-muted;
+  }
+
+  .dolitmd-stats-feed__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    font-size: 12px;
+    color: $stats-muted;
+
+    a {
+      color: inherit;
+    }
+  }
+
+  .dolitmd-stats-feed__aside {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: $stats-muted;
+    white-space: nowrap;
+  }
+}
+
+/* Customers: the name takes what the figures leave, cut with an ellipsis */
+.dolitmd-stats-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 13px;
+
+  .dolitmd-stats-table__nb {
+    width: 72px;
+  }
+
+  .dolitmd-stats-table__time {
+    width: 84px;
+  }
+
+  // On a phone the customer keeps the room, the mean time is on the tile « Requests done »
+  @media (max-width: 600px) {
+    .dolitmd-stats-table__nb {
+      width: 52px;
+    }
+
+    .dolitmd-stats-table__time {
+      display: none;
+    }
+  }
+
+  th {
+    padding: 0 8px 8px;
+    border-bottom: 1px solid $stats-line;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: $stats-muted;
+
+    // The figures are narrow: their title goes on two lines rather than being cut
+    &.right {
+      text-align: right;
+      white-space: normal;
+      line-height: 1.2;
+      vertical-align: bottom;
+    }
+  }
+
+  td {
+    padding: 8px;
+    border-bottom: 1px solid $stats-line;
+    vertical-align: top;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+  }
+
+  tr:last-child td {
+    border-bottom: 0;
+  }
+
+  // One pixel: the first letter of an uppercase title is not cut by the scrolling box around the table
+  th:first-child,
+  td:first-child {
+    padding-left: 1px;
+  }
+
+  th:last-child,
+  td:last-child {
+    padding-right: 0;
+  }
+}
