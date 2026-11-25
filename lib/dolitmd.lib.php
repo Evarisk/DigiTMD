@@ -387,14 +387,38 @@ function dolitmd_document_line_html(Tmd $object, array $file, bool $canDelete): 
  *
  * @param  array{name:string,size:int} $file    Document of the tab Documents (Tmd::getPublicFiles())
  * @param  bool                        $checked Attached
+ * @param  Tmd|null                    $object  TMD request: its name checked against the nomeref ID of the request
  * @return string                               HTML of the line
  */
-function dolitmd_done_file_html(array $file, bool $checked): string
+function dolitmd_done_file_html(array $file, bool $checked, ?Tmd $object = null): string
 {
     $fileId = 'dolitmd-file-' . dol_hash($file['name'], 'md5');
 
     $out  = '<div><input type="checkbox" id="' . $fileId . '" name="files[]" value="' . dol_escape_htmltag($file['name']) . '"' . ($checked ? ' checked' : '') . '>';
-    $out .= ' <label for="' . $fileId . '">' . img_mime($file['name'], '', 'pictofixedwidth') . dol_escape_htmltag($file['name']) . ' <span class="opacitymedium">(' . dol_print_size($file['size']) . ')</span></label></div>';
+    $out .= ' <label for="' . $fileId . '">' . img_mime($file['name'], '', 'pictofixedwidth') . dol_escape_htmltag($file['name']) . ' <span class="opacitymedium">(' . dol_print_size($file['size']) . ')</span></label>';
+    if ($object !== null && Tmd::documentMismatchesSoftwareRef((string) $object->software_ref, $file['name'])) {
+        $out .= dolitmd_document_mismatch_html($object, $file['name']);
+    }
+    $out .= '</div>';
 
     return $out;
+}
+
+/**
+ * Warning of a document whose name does not match the nomeref ID of the request (Tmd::documentMismatchesSoftwareRef()):
+ * on the card, the tab Documents and the mail to the customer. Never blocking: another name may be wanted
+ *
+ * @param  Tmd    $object   TMD request
+ * @param  string $fileName Name of the file
+ * @return string           HTML of the warning
+ */
+function dolitmd_document_mismatch_html(Tmd $object, string $fileName): string
+{
+    global $langs;
+
+    $langs->load('dolitmd@dolitmd');
+    // The name and the ID written as they are, escaped once (trans() would encode them again)
+    $text = $langs->transnoentities('TmdDocumentMismatch', $fileName, trim((string) $object->software_ref));
+
+    return '<div class="warning dolitmd-document-mismatch"><i class="fas fa-exclamation-triangle pictofixedwidth"></i>' . dol_escape_htmltag($text) . '</div>';
 }
