@@ -60,6 +60,16 @@ foreach ($thread as $item) {
     print '</div>';
     if (!empty($item['files'])) {
         print '<div class="timeline-footer dolitmd-request-files">';
+        // Every attachment of the message at once: one file downloaded as it is, several in a ZIP archive (action
+        // downloadall of the card, the message given)
+        if ($canOpenFiles) {
+            $url = count($item['files']) === 1 ? DOL_URL_ROOT . '/document.php?modulepart=ticket&' . $entityParam . '&file=' . urlencode($item['files'][0]['path']) . '&attachment=1'
+                : $_SERVER['PHP_SELF'] . '?id=' . $object->id . '&action=downloadall&messageid=' . ((int) $item['id']) . '&token=' . newToken();
+            print '<div class="dolitmd-request-files-actions">';
+            print '<a class="dolitmd-download-all" href="' . dol_escape_htmltag($url) . '" title="' . dol_escape_htmltag($langs->trans('TmdDownloadAllHelp')) . '">';
+            print '<i class="fas fa-download"></i>' . $langs->trans('TmdDownloadAll', count($item['files'])) . '</a>';
+            print '</div>';
+        }
         foreach ($item['files'] as $file) {
             // A tile per file: the image itself or the picto of its type, opened in the preview of Dolibarr (images, PDF,
             // text, videos: the window of document_preview, a new tab on a phone), the others downloaded

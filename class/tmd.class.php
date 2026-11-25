@@ -683,6 +683,57 @@ class Tmd extends SaturneObject
     }
 
     /**
+     * The attachments of a message of the thread of the request (getRequestThread())
+     *
+     * @param  int   $eventId Event of the message, 0 for the mail of the request
+     * @return array<int,array{name:string,size:int,path:string,fullname:string}>
+     */
+    public function getRequestFiles(int $eventId): array
+    {
+        foreach ($this->getRequestThread() as $item) {
+            if ((int) $item['id'] === $eventId) {
+                return $item['files'];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * The attachments of a message of the thread of the request in one ZIP archive, to download them at once
+     *
+     * @param  string $zipPath File of the archive, replaced
+     * @param  int    $eventId Event of the message, 0 for the mail of the request
+     * @return int             Files put in the archive, < 0 if KO (error in $this->error)
+     */
+    public function zipRequestFiles(string $zipPath, int $eventId): int
+    {
+        if (!class_exists('ZipArchive')) {
+            $this->error = 'ZipArchive missing';
+            return -1;
+        }
+        dol_delete_file($zipPath);
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            $this->error = 'Cannot create ' . basename($zipPath);
+            return -1;
+        }
+        $added = 0;
+        foreach ($this->getRequestFiles($eventId) as $file) {
+            // Names are unique: the files of a ticket are in one directory
+            if (is_file($file['fullname']) && $zip->addFile($file['fullname'], $file['name'])) {
+                $added++;
+            }
+        }
+        if (!$zip->close()) {
+            $this->error = 'Cannot write ' . basename($zipPath);
+            return -1;
+        }
+
+        return $added;
+    }
+
+    /**
      * Under the banner of the tab Documents (saturne_document.php): its files are seen by the customer
      *
      * @param  int    $id Id of the request

@@ -54,6 +54,10 @@ demande ou d'un mail déjà rangé dans la demande (une réponse, le mail d'une 
 numéro de suivi Dolibarr du ticket (mail écrit depuis le ticket), ou à la référence du ticket (`[TS2611-0043]`) ou de
 la demande dans son objet. La liste montre le nombre de réponses devant l'objet.
 
+Sur la fiche, le bloc « Demande du client » montre le mail puis les messages du ticket avec leurs pièces jointes
+(aperçu, téléchargement). **Tout télécharger**, au-dessus des pièces jointes d'un message, les récupère d'un coup : une
+archive ZIP s'il y en a plusieurs, le fichier lui-même s'il n'y en a qu'une.
+
 Un mail du fil d'une demande qui parle d'autre chose est une **nouvelle demande** : un client écrit souvent sa
 nouvelle demande en répondant dans Outlook à l'ancienne et en changeant l'objet. L'objet du mail doit reprendre
 celui de la demande (« RE: », « TR: », « RELANCE », les balises entre crochets et la ponctuation ne comptent pas) sans
