@@ -110,8 +110,7 @@ télécharger. Tous les fichiers de l'onglet Documents y sont visibles (l'onglet
 ### Mails automatiques
 
 Désactivés par défaut, activés un par un dans la configuration, écrits à partir de leur modèle (Configuration > Emails >
-Modèles, type « Demandes TMD ») et envoyés par la boîte mail des demandes TMD (sinon par la configuration mail de
-Dolibarr) :
+Modèles, type « Demandes TMD ») et envoyés depuis l'adresse d'expédition de la configuration (voir plus bas) :
 
 - **Accusé de réception** au client à la réception (référence du ticket, échéance, lien de sa page de suivi), dans la
   conversation de son mail ;
@@ -177,6 +176,15 @@ fusionnées) ne comptent jamais.
 ### Configuration
 
 Configuration > Modules > DoliTMD : la boîte mail des demandes TMD et les personnes à qui les tickets sont attribués.
+
+**Adresse d'expédition des mails** : tous les mails de DoliTMD partent de l'adresse choisie (accusé de réception,
+rappel des retards, messages et « demande traitée » de la fiche, et les mails du module Ticket pour les tickets des
+demandes : création, clôture, messages écrits depuis le ticket). La liste propose les boîtes actives d'Inbox et leurs
+identités, envoyées par le serveur de leur boîte, puis les adresses de la configuration mail de Dolibarr et ses profils
+d'expéditeur, envoyées par le serveur mail de Dolibarr. Les mails du module Ticket partent toujours par le serveur mail
+de Dolibarr : il doit avoir le droit d'envoyer pour le domaine de l'adresse. Quand l'adresse n'est pas celle de la boîte
+des demandes TMD, celle-ci est donnée comme adresse de réponse : les réponses des clients y reviennent. Par défaut : la
+boîte des demandes TMD (sinon la configuration mail de Dolibarr), et l'adresse du module Ticket pour ses mails.
 
 ## Traductions
 

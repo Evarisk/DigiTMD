@@ -35,10 +35,10 @@ require_once __DIR__ . '/tmd.class.php';
  * Each mail is written from its template (Setup > Emails > Templates, type « TMD requests »). The receipt and the
  * reminder of the late requests are automatic, off until switched on in the setup; the mail « request done » and the
  * messages to the customer while the request is being done are never automatic: they leave from the buttons of the card
- * (or the API), once read again. Sent by the server of the TMD
- * mailbox (module Inbox) when there is one: the sender sees the TMD address, his answer comes back in the same
- * conversation (In-Reply-To). Else by the mail setup of Dolibarr. The nomeref ID is internal: never offered to the
- * templates.
+ * (or the API), once read again. They come from the address chosen in the setup, else from the TMD mailbox: sent by the
+ * server of the mailbox of Inbox that has this address, else by the mail setup of Dolibarr. The answer of the customer
+ * comes back in the same conversation (In-Reply-To), to the TMD mailbox (Reply-To when another address sends). The
+ * nomeref ID is internal: never offered to the templates.
  */
 class TmdMailer
 {
@@ -65,6 +65,12 @@ class TmdMailer
         'message' => 'TmdMailMessageSent',
         'done'    => 'TmdMailDoneSent',
     ];
+
+    /**
+     * Constant of the address all the mails of DoliTMD come from (setup); empty: the TMD mailbox, else the mail setup of
+     * Dolibarr, and the address of the module Ticket for the mails of the tickets
+     */
+    public const SENDER_CONST = 'DOLITMD_MAIL_FROM';
 
     /**
      * @var DoliDB Database handler
@@ -255,16 +261,159 @@ class TmdMailer
     }
 
     /**
-     * Address the mails of the requests come from: the TMD mailbox, else the mail setup of Dolibarr
+     * Address the mails of the requests come from, as shown on the card
      *
      * @return string
      */
     public function senderAddress(): string
     {
+        $sender = $this->sender();
+
+        return $sender['name'] !== '' ? $sender['name'] . ' <' . $sender['email'] . '>' : $sender['email'];
+    }
+
+    /**
+     * Sender of the mails of DoliTMD: the address chosen in the setup, else the TMD mailbox, else the mail setup of
+     * Dolibarr. The mailbox of Inbox that has this address (its own address or one of its identities, the TMD mailbox
+     * first) sends with its server: its mail server is the one allowed to send for this address
+     *
+     * @return array{email:string,name:string,account:int} Account: the mailbox of Inbox that sends, 0 for the mail setup of Dolibarr
+     */
+    public function sender(): array
+    {
+        require_once __DIR__ . '/tmdmailhandler.class.php';
+        $mailbox   = TmdMailHandler::configuredMailbox($this->db);
+        $mailboxId = $mailbox !== null && (int) $mailbox->status === 1 ? (int) $mailbox->rowid : 0;
+        $company   = getDolGlobalString('MAIN_INFO_SOCIETE_NOM');
+
+        $email = strtolower(trim(getDolGlobalString(self::SENDER_CONST)));
+        if ($email === '') {
+            if ($mailboxId <= 0) {
+                return ['email' => getDolGlobalString('MAIN_MAIL_EMAIL_FROM'), 'name' => '', 'account' => 0];
+            }
+            $email = strtolower(trim((string) $mailbox->email));
+        }
+
+        if (isModEnabled('inbox')) {
+            global $conf;
+
+            $p    = $this->db->prefix();
+            $sql  = 'SELECT a.rowid, a.label, i.name FROM ' . $p . 'inbox_account AS a';
+            $sql .= ' LEFT JOIN ' . $p . "inbox_identity AS i ON i.fk_account = a.rowid AND i.status = 1 AND LOWER(i.email) = '" . $this->db->escape($email) . "'";
+            $sql .= ' WHERE a.entity = ' . ((int) $conf->entity) . " AND a.status = 1 AND (LOWER(a.email) = '" . $this->db->escape($email) . "' OR i.rowid IS NOT NULL)";
+            // getRow() adds the LIMIT 1
+            $sql .= ' ORDER BY a.rowid = ' . $mailboxId . ' DESC, a.rowid ASC';
+            $row  = $this->db->getRow($sql);
+            if (is_object($row)) {
+                $name = trim((string) ($row->name ?: ($row->label && strtolower((string) $row->label) !== $email ? $row->label : $company)));
+                return ['email' => $email, 'name' => $name, 'account' => (int) $row->rowid];
+            }
+        }
+
+        // The mail setup of Dolibarr: the name of the sender profile of this address, else the one of the company
+        $profile = $this->db->getRow('SELECT label FROM ' . $this->db->prefix() . "c_email_senderprofile WHERE LOWER(email) = '" . $this->db->escape($email) . "' AND active = 1 AND private = 0 AND entity IN (" . getEntity('c_email_senderprofile') . ') ORDER BY position ASC');
+
+        return ['email' => $email, 'name' => trim(is_object($profile) && (string) $profile->label !== '' ? (string) $profile->label : $company), 'account' => 0];
+    }
+
+    /**
+     * Reply-to address of the mails to the customer: the TMD mailbox, when another mailbox or the mail server of
+     * Dolibarr sends. The answers of the customer come back to the TMD mailbox, where DoliTMD adds them to the request
+     *
+     * @param  array{email:string,name:string,account:int} $sender Sender (sender())
+     * @return string                                             Empty when the TMD mailbox sends
+     */
+    public function replyTo(array $sender): string
+    {
         require_once __DIR__ . '/tmdmailhandler.class.php';
         $mailbox = TmdMailHandler::configuredMailbox($this->db);
+        if ($mailbox === null || (int) $mailbox->status !== 1 || !isValidEmail((string) $mailbox->email) || $sender['account'] === (int) $mailbox->rowid) {
+            return '';
+        }
 
-        return $mailbox !== null && (int) $mailbox->status === 1 ? (string) $mailbox->email : getDolGlobalString('MAIN_MAIL_EMAIL_FROM');
+        return strtolower(trim((string) $mailbox->email)) === strtolower($sender['email']) ? '' : (string) $mailbox->email;
+    }
+
+    /**
+     * Addresses offered in the setup as sender: the active mailboxes of Inbox and their identities (sent by their
+     * server), then the addresses of the setup of Dolibarr and its sender profiles (sent by the mail server of Dolibarr)
+     *
+     * @param  DoliDB $db Database handler
+     * @return array<string,string> Address (lower case) => label
+     */
+    public static function senderChoices(DoliDB $db): array
+    {
+        global $conf, $langs;
+
+        $inbox = [];
+        if (isModEnabled('inbox')) {
+            $p    = $db->prefix();
+            $rows = $db->getRows('SELECT a.email, a.label FROM ' . $p . 'inbox_account AS a WHERE a.entity = ' . ((int) $conf->entity) . ' AND a.status = 1 ORDER BY a.email LIMIT 200');
+            foreach (is_array($rows) ? $rows : [] as $row) {
+                $inbox[strtolower(trim((string) $row->email))] = (string) $row->label;
+            }
+            $sql  = 'SELECT i.email, i.name FROM ' . $p . 'inbox_identity AS i INNER JOIN ' . $p . 'inbox_account AS a ON a.rowid = i.fk_account';
+            $sql .= ' WHERE a.entity = ' . ((int) $conf->entity) . ' AND a.status = 1 AND i.status = 1 ORDER BY i.email LIMIT 500';
+            $rows = $db->getRows($sql);
+            foreach (is_array($rows) ? $rows : [] as $row) {
+                $email = strtolower(trim((string) $row->email));
+                if (!isset($inbox[$email])) {
+                    $inbox[$email] = (string) $row->name;
+                }
+            }
+        }
+
+        $dolibarr = [];
+        foreach (['MAIN_MAIL_EMAIL_FROM', 'MAIN_INFO_SOCIETE_MAIL', 'TICKET_NOTIFICATION_EMAIL_FROM'] as $const) {
+            // MAIN_MAIL_EMAIL_FROM may be « Name <address> »
+            $value = getDolGlobalString($const);
+            $email = strtolower(trim(preg_match('/<([^<>]+)>/', $value, $m) ? $m[1] : $value));
+            if ($email !== '') {
+                $dolibarr[$email] = '';
+            }
+        }
+        $rows = $db->getRows('SELECT email, label FROM ' . $db->prefix() . 'c_email_senderprofile WHERE active = 1 AND private = 0 AND entity IN (' . getEntity('c_email_senderprofile') . ') ORDER BY position ASC, email ASC LIMIT 200');
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            $dolibarr[strtolower(trim((string) $row->email))] = (string) $row->label;
+        }
+
+        $out = [];
+        foreach ([[$inbox, 'TmdSetupMailFromByInbox'], [$dolibarr, 'TmdSetupMailFromByDolibarr']] as [$list, $key]) {
+            foreach ($list as $email => $name) {
+                if (isValidEmail($email) && !isset($out[$email])) {
+                    $label       = $name !== '' && strtolower($name) !== $email ? $name . ' <' . $email . '>' : $email;
+                    $out[$email] = $langs->transnoentities($key, $label);
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Run a call of the module Ticket that may send its mails (ticket created, closed, message written) with the
+     * sender chosen in the setup: the module Ticket has a single sender for every ticket of Dolibarr. Changed for the time
+     * of the call only, as the module Ticket does for the automatic copy (MAIN_MAIL_AUTOCOPY_TO). These mails always
+     * leave by the mail server of Dolibarr
+     *
+     * @param  callable $callback Call
+     * @return mixed              What the call returns
+     */
+    public static function withTicketSender(callable $callback)
+    {
+        global $conf;
+
+        $email = strtolower(trim(getDolGlobalString(self::SENDER_CONST)));
+        if ($email === '') {
+            return $callback();
+        }
+        $global                                       = getDolGlobalString('TICKET_NOTIFICATION_EMAIL_FROM');
+        $conf->global->TICKET_NOTIFICATION_EMAIL_FROM = $email;
+        try {
+            return $callback();
+        } finally {
+            $conf->global->TICKET_NOTIFICATION_EMAIL_FROM = $global;
+        }
     }
 
     /**
@@ -444,7 +593,7 @@ class TmdMailer
         }
         [$subject, $html] = $this->compose($template, $this->substitutions($tmd, $ticket));
 
-        $headers = ['Auto-Submitted' => $autoSubmitted, 'X-Auto-Response-Suppress' => 'All'];
+        $headers = ['Auto-Submitted' => $autoSubmitted, 'X-Auto-Response-Suppress' => 'All', 'Reply-To' => $this->replyTo($this->sender())];
         if (!empty($tmd->message_id)) {
             $headers['In-Reply-To'] = '<' . $tmd->message_id . '>';
             $headers['References']  = '<' . $tmd->message_id . '>';
@@ -543,7 +692,18 @@ class TmdMailer
     }
 
     /**
-     * Send: by the server of the TMD mailbox (Inbox), else by the mail setup of Dolibarr
+     * Address of the sender for the mail setup of Dolibarr (« Name <address> »)
+     *
+     * @param  array{email:string,name:string,account:int} $sender Sender (sender())
+     * @return string
+     */
+    protected function cmailFrom(array $sender): string
+    {
+        return $sender['name'] !== '' ? $sender['name'] . ' <' . $sender['email'] . '>' : $sender['email'];
+    }
+
+    /**
+     * Send: by the server of the mailbox of Inbox of the sender (sender()), else by the mail setup of Dolibarr
      *
      * @param  string               $to      Recipient
      * @param  string               $subject Subject
@@ -554,34 +714,30 @@ class TmdMailer
      */
     protected function send(string $to, string $subject, string $html, array $headers, ?Ticket $ticket = null): bool
     {
-        global $conf;
-
         $this->error = '';
         $text        = $this->text($html);
         $page        = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' . $html . '</body></html>';
 
-        require_once __DIR__ . '/tmdmailhandler.class.php';
-        $mailbox = TmdMailHandler::configuredMailbox($this->db);
-        if ($mailbox !== null && (int) $mailbox->status === 1 && dol_include_once('/inbox/class/inboxsystemmail.class.php') && dol_include_once('/inbox/class/inboxaccount.class.php') && class_exists('InboxSystemMail')) {
+        $from = $this->sender();
+        if ($from['account'] > 0 && dol_include_once('/inbox/class/inboxsystemmail.class.php') && dol_include_once('/inbox/class/inboxaccount.class.php') && class_exists('InboxSystemMail')) {
             $account = new InboxAccount($this->db);
-            if ($account->fetch((int) $mailbox->rowid) > 0) {
+            if ($account->fetch($from['account']) > 0) {
                 $boundary = 'dolitmd' . md5(uniqid('', true));
                 [$contentType, $body] = InboxSystemMail::multipart('multipart/alternative', [
                     InboxSystemMail::part('text/plain; charset=UTF-8', $text),
                     InboxSystemMail::part('text/html; charset=UTF-8', $page),
                 ], $boundary);
-                $from   = ['email' => (string) $account->email, 'name' => (string) ($account->label && $account->label !== $account->email ? $account->label : getDolGlobalString('MAIN_INFO_SOCIETE_NOM'))];
                 $sender = new InboxSystemMail();
-                if ($sender->send($this->db, $account, $from, $to, $subject, $contentType, $body, $headers)) {
+                if ($sender->send($this->db, $account, ['email' => $from['email'], 'name' => $from['name']], $to, $subject, $contentType, $body, $headers)) {
                     return true;
                 }
                 $this->error = $sender->errorCode . ' ' . $sender->error;
-                dol_syslog(__METHOD__ . ' mail to ' . $to . ' not sent by the TMD mailbox: ' . $this->error, LOG_WARNING);
+                dol_syslog(__METHOD__ . ' mail to ' . $to . ' not sent by the mailbox ' . $from['email'] . ': ' . $this->error, LOG_WARNING);
                 return false;
             }
         }
 
-        // No TMD mailbox: the mail setup of Dolibarr
+        // No mailbox of Inbox for the sender: the mail setup of Dolibarr
         require_once DOL_DOCUMENT_ROOT . '/core/class/CMailFile.class.php';
         $more = '';
         foreach (['Auto-Submitted', 'X-Auto-Response-Suppress'] as $name) {
@@ -589,8 +745,7 @@ class TmdMailer
                 $more .= $name . ': ' . $headers[$name] . "\r\n";
             }
         }
-        $from = getDolGlobalString('MAIN_MAIL_EMAIL_FROM');
-        $mail = new CMailFile($subject, $to, $from, $page, [], [], [], '', '', 0, 1, '', '', $ticket ? 'tic' . $ticket->id : '', $more, 'standard', '', '', trim($headers['In-Reply-To'] ?? '', '<>'), trim($headers['References'] ?? '', '<>'));
+        $mail = new CMailFile($subject, $to, $this->cmailFrom($from), $page, [], [], [], '', '', 0, 1, '', '', $ticket ? 'tic' . $ticket->id : '', $more, 'standard', (string) ($headers['Reply-To'] ?? ''), '', trim($headers['In-Reply-To'] ?? '', '<>'), trim($headers['References'] ?? '', '<>'));
         if ($mail->sendfile()) {
             return true;
         }
@@ -629,8 +784,8 @@ class TmdMailer
     }
 
     /**
-     * Send to several people with attachments: by the TMD mailbox as a mail written in Inbox (a copy in its Sent
-     * folder, the conversation of the request), else by the mail setup of Dolibarr
+     * Send to several people with attachments: by the mailbox of Inbox of the sender (sender()) as a mail written in
+     * Inbox (a copy in its Sent folder, the conversation of the request), else by the mail setup of Dolibarr
      *
      * @param  array<int,array{email:string,name:string}>                     $to          Recipients
      * @param  array<int,array{email:string,name:string}>                     $cc          Copies
@@ -651,17 +806,20 @@ class TmdMailer
             return false;
         }
 
-        require_once __DIR__ . '/tmdmailhandler.class.php';
-        $mailbox = TmdMailHandler::configuredMailbox($this->db);
-        if ($mailbox !== null && (int) $mailbox->status === 1 && $this->inboxCanSend()) {
+        $from    = $this->sender();
+        $replyTo = $this->replyTo($from);
+        if ($from['account'] > 0 && $this->inboxCanSend()) {
             $account = new InboxAccount($this->db);
-            if ($account->fetch((int) $mailbox->rowid) > 0) {
+            if ($account->fetch($from['account']) > 0) {
                 $builder          = new InboxMailBuilder();
-                $builder->from    = ['email' => (string) $account->email, 'name' => (string) ($account->label && $account->label !== $account->email ? $account->label : getDolGlobalString('MAIN_INFO_SOCIETE_NOM'))];
+                $builder->from    = ['email' => $from['email'], 'name' => $from['name']];
                 $builder->to      = $to;
                 $builder->cc      = $cc;
                 $builder->subject = $subject;
                 $builder->html    = $html;
+                if ($replyTo !== '' && property_exists($builder, 'replyTo')) {
+                    $builder->replyTo = $replyTo;
+                }
                 if ($inReplyTo !== '') {
                     $builder->inReplyTo  = $inReplyTo;
                     $builder->references = [$inReplyTo];
@@ -706,11 +864,11 @@ class TmdMailer
             }
         }
 
-        // No TMD mailbox: the mail setup of Dolibarr
+        // No mailbox of Inbox for the sender: the mail setup of Dolibarr
         require_once DOL_DOCUMENT_ROOT . '/core/class/CMailFile.class.php';
         $page = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' . $html . '</body></html>';
-        $mail = new CMailFile($subject, self::addressesText($to), getDolGlobalString('MAIN_MAIL_EMAIL_FROM'), $page, array_column($attachments, 'fullname'), array_map('dol_mimetype', array_column($attachments, 'name')),
-            array_column($attachments, 'name'), self::addressesText($cc), '', 0, 1, '', '', $ticket ? 'tic' . $ticket->id : '', '', 'standard', '', '', $inReplyTo, $inReplyTo);
+        $mail = new CMailFile($subject, self::addressesText($to), $this->cmailFrom($from), $page, array_column($attachments, 'fullname'), array_map('dol_mimetype', array_column($attachments, 'name')),
+            array_column($attachments, 'name'), self::addressesText($cc), '', 0, 1, '', '', $ticket ? 'tic' . $ticket->id : '', '', 'standard', $replyTo, '', $inReplyTo, $inReplyTo);
         if ($mail->sendfile()) {
             return true;
         }

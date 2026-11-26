@@ -18,7 +18,7 @@
 /**
  * \file    admin/setup.php
  * \ingroup dolitmd
- * \brief   DoliTMD setup page: reception (mailbox, person assigned), delay, invoicing, automatic mails
+ * \brief   DoliTMD setup page: reception (mailbox, person assigned, sender of the mails), delay, invoicing, automatic mails
  */
 
 // Load DoliTMD environment
@@ -87,6 +87,11 @@ if ($action == 'set_config' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
     }
+    // Sender of the mails: one of the addresses offered, or the one already saved
+    $mailFrom = strtolower(trim(GETPOST('mail_from', 'alphanohtml')));
+    if ($mailFrom !== '' && !array_key_exists($mailFrom, TmdMailer::senderChoices($db)) && $mailFrom !== strtolower(getDolGlobalString(TmdMailer::SENDER_CONST))) {
+        $mailFrom = '';
+    }
 
     // A mailbox newly chosen: only the mails received from now on become requests, never its history
     if ($mailboxId > 0 && $mailboxId !== getDolGlobalInt('DOLITMD_INBOX_ACCOUNT')) {
@@ -95,6 +100,9 @@ if ($action == 'set_config' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     dolibarr_set_const($db, 'DOLITMD_INBOX_ACCOUNT', $mailboxId > 0 ? (string) $mailboxId : '', 'chaine', 0, '', $conf->entity);
     dolibarr_set_const($db, 'DOLITMD_TICKET_USER', implode(',', $assignUserIds), 'chaine', 0, '', $conf->entity);
     dolibarr_set_const($db, 'DOLITMD_TICKET_NOTIFICATION_EMAIL_TO', $notifyTo, 'chaine', 0, '', $conf->entity);
+    if (GETPOSTISSET('mail_from')) {
+        dolibarr_set_const($db, TmdMailer::SENDER_CONST, $mailFrom, 'chaine', 0, '', $conf->entity);
+    }
     dolibarr_set_const($db, 'DOLITMD_DELAY_DAYS', (string) $delay, 'chaine', 0, '', $conf->entity);
     if (GETPOSTISSET('invoice_product')) {
         dolibarr_set_const($db, 'DOLITMD_INVOICE_PRODUCT', $productId > 0 ? (string) $productId : '', 'chaine', 0, '', $conf->entity);
@@ -158,6 +166,17 @@ $globalNotifyTo = getDolGlobalString('TICKET_NOTIFICATION_EMAIL_TO');
 print '<tr class="oddeven"><td><label for="notify_email">' . $langs->trans('TmdSetupNotifyEmail') . '</label></td>';
 print '<td>' . $langs->trans('TmdSetupNotifyEmailHelp', $globalNotifyTo !== '' ? $globalNotifyTo : $langs->transnoentities('TmdSetupNotifyEmailNone')) . '</td>';
 print '<td>' . img_picto('', 'email', 'class="pictofixedwidth"') . '<input type="text" class="minwidth300 maxwidth400 widthcentpercentminusx" id="notify_email" name="notify_email" value="' . dol_escape_htmltag(getDolGlobalString('DOLITMD_TICKET_NOTIFICATION_EMAIL_TO')) . '" placeholder="' . dol_escape_htmltag($globalNotifyTo) . '"></td>';
+print '</tr>';
+
+// Sender of every mail of DoliTMD; an address saved that is no longer offered stays shown, so as not to be lost silently
+$mailFromChoices = TmdMailer::senderChoices($db);
+$mailFrom        = strtolower(getDolGlobalString(TmdMailer::SENDER_CONST));
+if ($mailFrom !== '' && !array_key_exists($mailFrom, $mailFromChoices)) {
+    $mailFromChoices = [$mailFrom => $mailFrom] + $mailFromChoices;
+}
+print '<tr class="oddeven"><td><label for="mail_from">' . $langs->trans('TmdSetupMailFrom') . '</label></td>';
+print '<td>' . $langs->trans('TmdSetupMailFromHelp') . '</td>';
+print '<td>' . $form->selectarray('mail_from', $mailFromChoices, $mailFrom, $langs->transnoentities('TmdSetupMailFromDefault'), 0, 0, '', 0, 0, 0, '', 'minwidth300') . '</td>';
 print '</tr>';
 print '</table>';
 
