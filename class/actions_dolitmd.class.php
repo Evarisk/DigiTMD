@@ -576,4 +576,87 @@ class ActionsDolitmd
 
         return 0;
     }
+
+    /**
+     * Block « TMD » in the panel of a mail of Inbox: the request the mail is in, or the one of its thread (read by Inbox
+     * at ajax/inbox.php after the panel is shown). Nothing for a mail about no request
+     *
+     * @param  array       $parameters  Hook metadata: mail, account, message_id, from, subject, mailref, socid, contactid
+     * @param  object|null $object      Nothing
+     * @param  string      $action      Nothing
+     * @param  HookManager $hookmanager Hook manager: the blocks of the other modules are kept
+     * @return int                      0 < on error, 0 on success, 1 to replace standard code
+     */
+    public function inboxMailPanels(array $parameters, $object = null, $action = '', $hookmanager = null): int
+    {
+        global $langs, $user;
+
+        $this->results = [];
+        $row           = $this->inboxMail($parameters, 'read');
+        if ($row === null) {
+            return 0;
+        }
+        require_once __DIR__ . '/tmdinbox.class.php';
+        if ((new TmdInbox($this->db))->relationOf($row)['id'] <= 0) {
+            return 0;
+        }
+
+        $langs->load('dolitmd@dolitmd');
+        $panels                  = is_object($hookmanager) && is_array($hookmanager->resArray['panels'] ?? null) ? $hookmanager->resArray['panels'] : [];
+        $panels[]                = ['id' => 'dolitmd', 'title' => $langs->transnoentities('TmdInboxPanelTitle'), 'icon' => 'truck', 'url' => dol_buildpath('/dolitmd/ajax/inbox.php', 1) . '?mail=' . ((int) $row->rowid)];
+        $this->results['panels'] = $panels;
+
+        return 0;
+    }
+
+    /**
+     * Button « Link to a TMD request » on a mail of Inbox about no request, for the users who may change the requests:
+     * a window of Inbox to choose the request (view/tmd/tmd_inbox_link.php)
+     *
+     * @param  array       $parameters  Hook metadata: mail, account, message_id, from, subject, mailref, socid, contactid
+     * @param  object|null $object      Nothing
+     * @param  string      $action      Nothing
+     * @param  HookManager $hookmanager Hook manager: the actions of the other modules are kept
+     * @return int                      0 < on error, 0 on success, 1 to replace standard code
+     */
+    public function inboxMailActions(array $parameters, $object = null, $action = '', $hookmanager = null): int
+    {
+        global $langs;
+
+        $this->results = [];
+        $row           = $this->inboxMail($parameters, 'write');
+        if ($row === null || trim((string) $row->message_id) === '') {
+            return 0;
+        }
+        require_once __DIR__ . '/tmdinbox.class.php';
+        if ((new TmdInbox($this->db))->relationOf($row)['id'] > 0) {
+            return 0;
+        }
+
+        $langs->load('dolitmd@dolitmd');
+        $actions                  = is_object($hookmanager) && is_array($hookmanager->resArray['actions'] ?? null) ? $hookmanager->resArray['actions'] : [];
+        $actions[]                = ['label' => $langs->transnoentities('TmdInboxLinkToRequest'), 'icon' => 'truck', 'window' => true, 'url' => TmdInbox::linkUrl((int) $row->rowid)];
+        $this->results['actions'] = $actions;
+
+        return 0;
+    }
+
+    /**
+     * Mail of Inbox of a hook, when the user may read or change the TMD requests and reads its mailbox
+     *
+     * @param  array       $parameters Hook metadata (mail)
+     * @param  string      $right      read or write
+     * @return object|null             Row of llx_inbox_mail
+     */
+    protected function inboxMail(array $parameters, string $right): ?object
+    {
+        global $user;
+
+        if (!isModEnabled('dolitmd') || empty($parameters['mail']) || !is_object($user) || !$user->hasRight('dolitmd', 'tmd', $right)) {
+            return null;
+        }
+        require_once __DIR__ . '/tmdinbox.class.php';
+
+        return (new TmdInbox($this->db))->mailRow((int) $parameters['mail'], $user);
+    }
 }

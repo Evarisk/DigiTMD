@@ -311,3 +311,28 @@ TmdStatsToInvoiceShort        = À facturer
 TmdStatsNoThirdparty          = Sans tiers
 TmdStatsLastDone              = Dernières demandes traitées
 TmdStatsNoLastDone            = Aucune demande traitée pour l'instant
+
+#
+# Mails d'Inbox
+#
+
+TmdInboxPanelTitle            = TMD
+TmdInboxLinkToRequest         = Lier à une TMD
+TmdInboxLinkTitle             = Lier le mail à une demande TMD
+TmdInboxAddToRequest          = Ajouter à la demande
+TmdInboxOpenRequest           = Ouvrir la demande
+TmdInboxNoRequest             = Ce mail n'est dans aucune demande TMD.
+TmdInboxMailNotInRequest      = Mail de la conversation de cette demande, pas encore dans son ticket.
+TmdInboxThreadOfRequest       = Conversation de cette demande.
+TmdInboxMailNotFound          = Mail introuvable, ou sa boîte ne vous est pas accessible.
+TmdInboxMailWithoutId         = Ce mail n'a pas de Message-ID : il ne peut pas être lié à une demande.
+TmdInboxChooseRequest         = Choisissez une demande TMD.
+TmdInboxMailInOtherRequest    = Ce mail est déjà dans une autre demande. Pour regrouper deux demandes, utilisez « Fusionner » dans la liste des demandes.
+TmdInboxLinkError             = Le mail n'a pas pu être ajouté à la demande.
+TmdInboxMailFrom              = Mail de %s, lié depuis Inbox
+TmdInboxRequest               = Demande TMD
+TmdInboxLinkHelp              = Le mail devient un message du ticket de la demande, à sa date, avec ses pièces jointes ; les personnes en copie deviennent contacts du ticket. Les réponses à ce mail iront ensuite dans cette demande. Aucun mail n'est envoyé.
+TmdInboxLinkButton            = Lier
+TmdInboxLinked                = Mail ajouté à la demande %s.
+TmdInboxAlreadyIn             = Ce mail est dans la demande %s.
+TmdInboxNoRequestToLink       = Aucune demande TMD à proposer.

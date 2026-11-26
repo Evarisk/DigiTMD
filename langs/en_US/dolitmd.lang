@@ -311,3 +311,28 @@ TmdStatsToInvoiceShort        = To invoice
 TmdStatsNoThirdparty          = No thirdparty
 TmdStatsLastDone              = Last requests done
 TmdStatsNoLastDone            = No request done yet
+
+#
+# Mails of Inbox
+#
+
+TmdInboxPanelTitle            = TMD
+TmdInboxLinkToRequest         = Link to a TMD
+TmdInboxLinkTitle             = Link the mail to a TMD request
+TmdInboxAddToRequest          = Add to the request
+TmdInboxOpenRequest           = Open the request
+TmdInboxNoRequest             = This mail is in no TMD request.
+TmdInboxMailNotInRequest      = Mail of the conversation of this request, not in its ticket yet.
+TmdInboxThreadOfRequest       = Conversation of this request.
+TmdInboxMailNotFound          = Mail not found, or its mailbox is not open to you.
+TmdInboxMailWithoutId         = This mail has no Message-ID: it cannot be linked to a request.
+TmdInboxChooseRequest         = Choose a TMD request.
+TmdInboxMailInOtherRequest    = This mail is already in another request. To put two requests together, use « Merge » in the list of the requests.
+TmdInboxLinkError             = The mail could not be added to the request.
+TmdInboxMailFrom              = Mail from %s, linked from Inbox
+TmdInboxRequest               = TMD request
+TmdInboxLinkHelp              = The mail becomes a message of the ticket of the request, at its date, with its attachments; the people in copy become contacts of the ticket. The answers to this mail then go to this request. No mail is sent.
+TmdInboxLinkButton            = Link
+TmdInboxLinked                = Mail added to the request %s.
+TmdInboxAlreadyIn             = This mail is in the request %s.
+TmdInboxNoRequestToLink       = No TMD request to offer.

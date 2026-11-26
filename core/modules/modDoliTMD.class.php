@@ -85,13 +85,15 @@ class modDoliTMD extends DolibarrModules
             'js'                => [],
             // saturnegetobjectsmetadata: the TMD requests in the generic list of Saturne ; elementproperties: the
             // inline edit of the list finds the class ; tmdlist_saturne: the columns, cards and script of that list
-            // emailtemplates: the type « TMD requests » in Setup > Emails > Templates
+            // emailtemplates: the type « TMD requests » in Setup > Emails > Templates ; inbox: the block « TMD » and the
+            // button « Link to a TMD request » on the mails of Inbox
             'hooks'             => [
                 'saturnegetobjectsmetadata',
                 'elementproperties',
                 'tmdlist_saturne',
                 'emailtemplates',
                 'ticketcard',
+                'inbox',
             ],
             'moduleforexternal' => 0,
         ];
