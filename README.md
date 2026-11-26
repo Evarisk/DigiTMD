@@ -80,6 +80,22 @@ Quand le tri s'est trompé, on corrige depuis la fiche, sans mail envoyé :
   en copie) deviennent une demande à part, avec son propre ticket ; l'objet proposé est celui du mail, modifiable. Les
   réponses à ce mail vont dans la nouvelle demande ; une note privée de l'ancienne dit où il est parti.
 
+### Les demandes dans Inbox
+
+Dans Inbox, le panneau d'un mail montre un bloc **TMD** quand le mail est dans une demande (le mail de la demande,
+une réponse, un mail lié) ou dans sa conversation : référence, objet, état, retard, catégorie, tiers, échéance et
+« Ouvrir la demande ». Le mail reste aussi lié au ticket de la demande (onglet Mails du ticket).
+
+**Lier à une TMD** (bouton d'un mail qui n'est dans aucune demande), ou **Ajouter à la demande** (bloc TMD d'un mail
+de sa conversation qui n'y est pas encore) : une fenêtre d'Inbox propose les demandes, celle de la conversation et
+celles de l'expéditeur ou de son tiers d'abord. Le mail devient un message du ticket de la demande, à sa date, avec ses
+pièces jointes ; les personnes en copie deviennent contacts du ticket (jamais la boîte TMD ni la boîte du mail). Les
+réponses à ce mail vont ensuite dans cette demande. Aucun mail n'est envoyé. Un mail de n'importe quelle boîte que
+l'utilisateur lit dans Inbox (une boîte personnelle comprise), pour qui a le droit de modifier les demandes TMD. Un
+mail déjà dans une demande y reste : deux demandes se regroupent par « Fusionner » dans la liste.
+
+Le module doit être désactivé puis réactivé après la mise à jour (contexte de hook `inbox`).
+
 ### Délais et retards
 
 Chaque demande reçoit une échéance : date de réception plus le délai de la configuration (15 jours par défaut,
