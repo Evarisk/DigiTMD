@@ -66,6 +66,11 @@ class TmdMailHandler
     public $output = '';
 
     /**
+     * @var int[] Other mailboxes of Inbox whose addresses are never people in copy: the mailbox of a mail linked by hand
+     */
+    protected $otherMailboxIds = [];
+
+    /**
      * Constructor
      *
      * @param DoliDB $db Database handler
@@ -520,9 +525,10 @@ class TmdMailHandler
      * @param  int               $dateMail Date of the mail
      * @param  User              $author   User
      * @param  object            $mailbox  Mailbox (InboxAccount or its row: id or rowid, email)
+     * @param  string            $title    Title of the message, empty: « Answer from <sender> »
      * @return bool
      */
-    protected function appendReply(int $parentId, object $row, $message, string $sender, int $dateMail, User $author, object $mailbox): bool
+    protected function appendReply(int $parentId, object $row, $message, string $sender, int $dateMail, User $author, object $mailbox, string $title = ''): bool
     {
         global $langs;
 
@@ -540,7 +546,9 @@ class TmdMailHandler
         if (empty($row->message_id) || !$this->db->query($sql)) {
             return false;
         }
-        $this->db->query('UPDATE ' . $p . 'dolitmd_tmd SET nb_replies = nb_replies + 1, date_last_reply = ' . "'" . $this->db->idate($dateMail) . "'" . ' WHERE rowid = ' . ((int) $parent->id));
+        // The last answer stays the newest one: a mail linked by hand from Inbox may be older
+        $date = "'" . $this->db->idate($dateMail) . "'";
+        $this->db->query('UPDATE ' . $p . 'dolitmd_tmd SET nb_replies = nb_replies + 1, date_last_reply = CASE WHEN date_last_reply IS NULL OR date_last_reply < ' . $date . ' THEN ' . $date . ' ELSE date_last_reply END WHERE rowid = ' . ((int) $parent->id));
 
         $ticket = new Ticket($this->db);
         if (empty($parent->fk_ticket) || $ticket->fetch((int) $parent->fk_ticket) <= 0) {
@@ -548,14 +556,15 @@ class TmdMailHandler
         }
         $ticket->message = $this->bodyText($message, (string) $row->snippet);
         $ticket->private = 0;
-        $eventId         = $ticket->createTicketMessage($author, 0, [], [], [], false, 0, $langs->transnoentities('TmdReplyFrom', $sender));
+        $eventId         = $ticket->createTicketMessage($author, 0, [], [], [], false, 0, $title !== '' ? $title : $langs->transnoentities('TmdReplyFrom', $sender));
         if ($eventId < 0) {
             dol_syslog(__METHOD__ . ' answer not added to ticket ' . $ticket->id . ': ' . $ticket->error, LOG_WARNING);
         } elseif ($eventId > 0) {
             // The message knows its mail: taken out of the thread as a request of its own, it keeps its subject and its
-            // thread (TmdMerger::split())
+            // thread (TmdMerger::split()). At the date of its mail: the thread of the card is in the order of the mails
             $this->db->query('UPDATE ' . $p . "actioncomm SET email_msgid = '" . $this->db->escape(dol_trunc((string) $row->message_id, 255, 'right', 'UTF-8', 1)) . "'"
                 . ", email_from = '" . $this->db->escape(dol_trunc($sender, 255, 'right', 'UTF-8', 1)) . "', email_subject = '" . $this->db->escape(dol_trunc((string) $row->subject, 255, 'right', 'UTF-8', 1)) . "'"
+                . ', datep = ' . $date . ', datep2 = ' . $date
                 . ' WHERE id = ' . ((int) $eventId));
         }
         $this->saveAttachments($ticket, $message, max(0, (int) $eventId));
@@ -863,10 +872,12 @@ class TmdMailHandler
      */
     protected function ownAddresses(object $mailbox): array
     {
-        $list      = [strtolower(trim((string) ($mailbox->email ?? '')))];
-        $mailboxId = (int) ($mailbox->id ?? $mailbox->rowid ?? 0);
-        if ($mailboxId > 0) {
-            $rows = $this->db->getRows('SELECT email FROM ' . $this->db->prefix() . 'inbox_identity WHERE fk_account = ' . $mailboxId . ' LIMIT 500');
+        $list       = [strtolower(trim((string) ($mailbox->email ?? '')))];
+        $mailboxIds = array_filter(array_merge([(int) ($mailbox->id ?? $mailbox->rowid ?? 0)], array_map('intval', $this->otherMailboxIds)));
+        if ($mailboxIds) {
+            $p    = $this->db->prefix();
+            $in   = implode(',', array_unique($mailboxIds));
+            $rows = $this->db->getRows('SELECT email FROM ' . $p . 'inbox_identity WHERE fk_account IN (' . $in . ') UNION SELECT email FROM ' . $p . 'inbox_account WHERE rowid IN (' . $in . ') LIMIT 500');
             foreach (is_array($rows) ? $rows : [] as $identity) {
                 $list[] = strtolower(trim((string) $identity->email));
             }
@@ -1016,15 +1027,16 @@ class TmdMailHandler
      * @param  string            $mailboxEmail Address of the mailbox
      * @param  string            $messageId    Message-ID
      * @param  User              $user         User asking
+     * @param  bool              $system       Read by the scheduled job; false: with the rights of the user in Inbox
      * @return InboxMessage|null
      */
-    protected function readMessage(string $mailboxEmail, string $messageId, User $user)
+    protected function readMessage(string $mailboxEmail, string $messageId, User $user, bool $system = true)
     {
         if ($mailboxEmail === '' || $messageId === '' || !dol_include_once('/inbox/class/inbox.class.php') || !class_exists('Inbox')) {
             return null;
         }
         $inbox   = new Inbox($this->db);
-        $message = $inbox->getMessage($mailboxEmail, $messageId, $user, 'dolitmd', true);
+        $message = $inbox->getMessage($mailboxEmail, $messageId, $user, 'dolitmd', $system);
         if ($message === null) {
             dol_syslog(__METHOD__ . ' mail ' . $messageId . ' not read: ' . $inbox->error, LOG_WARNING);
         }
@@ -1275,5 +1287,106 @@ class TmdMailHandler
             . ' ORDER BY ' . ($mailbox !== null ? '(fk_account = ' . ((int) $mailbox->rowid) . ') DESC, ' : '') . 'rowid ASC');
 
         return is_object($row) ? $row : null;
+    }
+
+    /**
+     * Request a mail is in: the one it created, else the one it was added to (an answer, a mail linked from Inbox, the
+     * first mail of a request merged into it). A request merged into another one gives that one; a mail left out by the
+     * scheduled job, or of a request deleted, is in none
+     *
+     * @param  string $messageId Message-ID of the mail
+     * @return int               Id of the request, 0 when none
+     */
+    public function requestOfMail(string $messageId): int
+    {
+        $messageId = trim($messageId);
+        if ($messageId === '') {
+            return 0;
+        }
+        $escaped = "'" . $this->db->escape($messageId) . "'";
+        $found   = $this->liveRequest('message_id = ' . $escaped);
+        if ($found > 0) {
+            return $found;
+        }
+
+        return $this->liveRequest('rowid IN (SELECT r.fk_tmd FROM ' . $this->db->prefix() . 'dolitmd_tmd_reply AS r WHERE r.message_id = ' . $escaped . ' AND r.fk_tmd > 0 AND r.entity IN (' . getEntity('tmd') . '))');
+    }
+
+    /**
+     * A mail of Inbox added by hand to a request (« Link to a TMD request » in Inbox), as an answer received: a message
+     * of its ticket at the date of the mail, its attachments, its people in copy made contacts of the ticket, the mail
+     * linked to the ticket in Inbox. A mail of any mailbox the user reads, read with his rights; the answers to it then
+     * go to this request. A mail already in a request stays there: two requests are merged from the list
+     *
+     * @param  Tmd    $tmd  Request
+     * @param  object $row  Row of llx_inbox_mail (as mailRow() reads it, and fk_account)
+     * @param  User   $user User linking
+     * @return int          1 when added, 0 when already in this request, < 0 on error (key of language in $this->error)
+     */
+    public function attachMail(Tmd $tmd, object $row, User $user): int
+    {
+        global $langs;
+
+        $this->error = '';
+        $messageId   = trim((string) ($row->message_id ?? ''));
+        if ($messageId === '') {
+            $this->error = 'TmdInboxMailWithoutId';
+            return -1;
+        }
+        if ($tmd->id <= 0 || (int) $tmd->status < 0) {
+            $this->error = 'TmdInboxChooseRequest';
+            return -1;
+        }
+        $current = $this->requestOfMail($messageId);
+        if ($current === (int) $tmd->id) {
+            return 0;
+        }
+        if ($current > 0) {
+            $this->error = 'TmdInboxMailInOtherRequest';
+            return -1;
+        }
+
+        $p       = $this->db->prefix();
+        $account = $this->db->getRow('SELECT rowid, email FROM ' . $p . 'inbox_account WHERE rowid = ' . ((int) ($row->fk_account ?? 0)));
+        if (!is_object($account)) {
+            $this->error = 'TmdInboxMailNotFound';
+            return -1;
+        }
+        // A mail left out by the scheduled job (an answer with the TMD mailbox in copy only) is kept now
+        $this->db->query('DELETE FROM ' . $p . "dolitmd_tmd_reply WHERE message_id = '" . $this->db->escape($messageId) . "' AND fk_tmd = 0 AND entity IN (" . getEntity('tmd') . ')');
+
+        $langs->load('dolitmd@dolitmd');
+        $sender   = strtolower(trim((string) (($row->requester_email ?? '') ?: ($row->from_email ?? ''))));
+        $dateMail = !empty($row->date_received) ? (int) $this->db->jdate($row->date_received) : (!empty($row->date_mail) ? (int) $this->db->jdate($row->date_mail) : dol_now());
+        $message  = $this->readMessage((string) $account->email, $messageId, $user, false);
+        // Neither the TMD mailbox nor the mailbox of the mail (the one of the user) become people in copy
+        $mailbox               = self::configuredMailbox($this->db) ?? $account;
+        $this->otherMailboxIds = [(int) $account->rowid];
+        try {
+            $added = $this->appendReply((int) $tmd->id, $row, $message, $sender, $dateMail, $user, $mailbox, $langs->transnoentities('TmdInboxMailFrom', $sender));
+        } finally {
+            $this->otherMailboxIds = [];
+        }
+        if (!$added) {
+            $this->error = 'TmdInboxLinkError';
+            return -1;
+        }
+        dol_syslog(__METHOD__ . ' mail ' . ((int) $row->rowid) . ' added to request ' . $tmd->id . ' by user ' . $user->id, LOG_INFO);
+
+        return 1;
+    }
+
+    /**
+     * An address of the TMD mailbox: the mailbox and its identities, the address the tickets write from, the sender of
+     * the mails of DoliTMD. Its mails in the thread of a request are already messages of the ticket (sent from the card)
+     *
+     * @param  string $email Address
+     * @return bool
+     */
+    public function isTmdAddress(string $email): bool
+    {
+        $email = strtolower(trim($email));
+
+        return $email !== '' && in_array($email, $this->ownAddresses(self::configuredMailbox($this->db) ?? (object) []), true);
     }
 }
