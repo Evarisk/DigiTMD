@@ -28,6 +28,7 @@ DoliTMD                = DoliTMD
 #
 
 ModuleSettings                = Settings
+TmdSetupMenu                  = DoliTMD setup
 TmdSetupReception             = Reception of the TMD requests
 TmdSetupMailbox               = Mailbox of the TMD requests
 TmdSetupMailboxHelp           = Each mail received in the inbox of this mailbox (module Inbox) creates a ticket and a TMD request. The messages written from these tickets give this mailbox as reply-to address: the answers of the customers come back to it and are added to the ticket.

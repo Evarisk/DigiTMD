@@ -266,6 +266,22 @@ class modDoliTMD extends DolibarrModules
             'target'   => '',
             'user'     => 0,
         ];
+        // Setup of the module, as the other modules of Evarisk have it in their menu (those Saturne adds it to)
+        $this->menu[$r++] = [
+            'fk_menu'  => 'fk_mainmenu=dolitmd',
+            'type'     => 'left',
+            'titre'    => 'TmdSetupMenu',
+            'prefix'   => '<i class="fas fa-cog pictofixedwidth"></i>',
+            'mainmenu' => 'dolitmd',
+            'leftmenu' => 'dolitmd_config',
+            'url'      => '/dolitmd/admin/setup.php',
+            'langs'    => 'dolitmd@dolitmd',
+            'position' => 1000 + $r,
+            'enabled'  => 'isModEnabled("dolitmd")',
+            'perms'    => '$user->hasRight("dolitmd", "adminpage", "read")',
+            'target'   => '',
+            'user'     => 0,
+        ];
     }
 
     /**
