@@ -307,7 +307,7 @@ class ActionsDolitmd
 
     /**
      * Mass change of state, once confirmed: each request checked takes the state (its ticket follows). On the card of
-     * the ticket of a request: the reply-to address of its messages
+     * the ticket of a request: the sender and the reply-to address of its messages
      *
      * @param  array        $parameters Hook metadata (context, etc...)
      * @param  CommonObject $object     Current object
@@ -319,7 +319,7 @@ class ActionsDolitmd
         global $langs, $user;
 
         if (is_object($object) && $object->element === 'ticket') {
-            $this->setTicketReplyTo($object);
+            $this->setTicketMailAddresses($object);
             return 0;
         }
         if (!is_object($object) || $object->element !== 'tmd' || !in_array($action, ['tmd_set_state', 'tmd_create_invoices', 'tmd_merge'], true) || GETPOST('confirm', 'alpha') !== 'yes') {
@@ -376,13 +376,13 @@ class ActionsDolitmd
     /**
      * Ticket of a TMD request (card of the ticket): the messages written from it give the TMD mailbox as reply-to
      * address, instead of the one of the module Ticket (the same for every ticket). The answers of the customer come
-     * back to that mailbox, where DoliTMD adds them to the ticket (its Message-ID). The sender is kept: the mail leaves
-     * by the mail server of Dolibarr, an address of another mailbox as sender would be taken for a forgery
+     * back to that mailbox, where DoliTMD adds them to the ticket (its Message-ID). They come from the sender chosen in
+     * the setup of DoliTMD, else from the one of the module Ticket: the mail leaves by the mail server of Dolibarr
      *
      * @param  CommonObject $ticket Ticket of the card
      * @return void
      */
-    protected function setTicketReplyTo($ticket): void
+    protected function setTicketMailAddresses($ticket): void
     {
         global $conf;
 
@@ -392,13 +392,21 @@ class ActionsDolitmd
             return;
         }
         $mailbox = TmdMailHandler::configuredMailbox($this->db);
-        if ($mailbox === null || !isValidEmail((string) $mailbox->email)) {
+        $replyTo = $mailbox !== null && isValidEmail((string) $mailbox->email) ? (string) $mailbox->email : '';
+        $sender  = strtolower(trim(getDolGlobalString('DOLITMD_MAIL_FROM')));
+        if ($replyTo === '' && $sender === '') {
             return;
         }
         $request = $this->db->getRow('SELECT rowid FROM ' . $this->db->prefix() . 'dolitmd_tmd WHERE fk_ticket = ' . ((int) $ticket->id) . ' AND entity IN (' . getEntity('tmd') . ') AND status >= 0');
-        if (is_object($request)) {
-            // For this page only: never saved
-            $conf->global->TICKET_NOTIFICATION_EMAIL_REPLYTO = (string) $mailbox->email;
+        if (!is_object($request)) {
+            return;
+        }
+        // For this page only: never saved
+        if ($replyTo !== '') {
+            $conf->global->TICKET_NOTIFICATION_EMAIL_REPLYTO = $replyTo;
+        }
+        if ($sender !== '') {
+            $conf->global->TICKET_NOTIFICATION_EMAIL_FROM = $sender;
         }
     }
 

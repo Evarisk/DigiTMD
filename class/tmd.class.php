@@ -841,10 +841,13 @@ class Tmd extends SaturneObject
         if ($ticket->fetch((int) $this->fk_ticket) <= 0) {
             return;
         }
-        if (in_array((int) $this->status, [self::STATUS_ERRONEOUS, self::STATUS_DELETED], true)) {
-            $result = $ticket->close($user, 1);
-        } elseif ($this->done || (int) $this->status === self::STATUS_SUBCONTRACTED) {
-            $result = $ticket->close($user, 0);
+        $cancel = in_array((int) $this->status, [self::STATUS_ERRONEOUS, self::STATUS_DELETED], true);
+        if ($cancel || $this->done || (int) $this->status === self::STATUS_SUBCONTRACTED) {
+            // Closing sends the mails of the module Ticket: from the sender of DoliTMD
+            require_once __DIR__ . '/tmdmailer.class.php';
+            $result = TmdMailer::withTicketSender(static function () use ($ticket, $user, $cancel) {
+                return $ticket->close($user, $cancel ? 1 : 0);
+            });
         } elseif (in_array((int) $ticket->status, [Ticket::STATUS_CLOSED, Ticket::STATUS_CANCELED], true)) {
             $result = $ticket->setStatut($ticket->fk_user_assign > 0 ? Ticket::STATUS_ASSIGNED : Ticket::STATUS_NOT_READ, null, '', 'TICKET_MODIFY');
         } else {

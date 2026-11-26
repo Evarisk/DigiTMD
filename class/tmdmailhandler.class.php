@@ -856,7 +856,7 @@ class TmdMailHandler
 
     /**
      * Addresses that are never people in copy: the TMD mailbox and its identities in Inbox, the address the messages of
-     * the tickets are written from
+     * the tickets are written from, the sender of the mails of DoliTMD
      *
      * @param  object   $mailbox Mailbox (InboxAccount or its row: id or rowid, email)
      * @return string[]          Lower case
@@ -871,7 +871,7 @@ class TmdMailHandler
                 $list[] = strtolower(trim((string) $identity->email));
             }
         }
-        if (preg_match_all('/[^\s<>,;"\']+@[^\s<>,;"\']+/', getDolGlobalString('TICKET_NOTIFICATION_EMAIL_FROM'), $matches)) {
+        if (preg_match_all('/[^\s<>,;"\']+@[^\s<>,;"\']+/', getDolGlobalString('TICKET_NOTIFICATION_EMAIL_FROM') . ' ' . getDolGlobalString('DOLITMD_MAIL_FROM'), $matches)) {
             $list = array_merge($list, array_map('strtolower', $matches[0]));
         }
 
@@ -1092,14 +1092,17 @@ class TmdMailHandler
 
         // The mail « New ticket » of the module Ticket goes to the address of DoliTMD when one is set: the module Ticket
         // has a single address for every ticket of Dolibarr, whatever module creates it. Its own way for the automatic
-        // copy (MAIN_MAIL_AUTOCOPY_TO): the setting changed for the time of the creation only
+        // copy (MAIN_MAIL_AUTOCOPY_TO): the setting changed for the time of the creation only. Same for its sender
+        require_once __DIR__ . '/tmdmailer.class.php';
         $notifyTo = getDolGlobalString('DOLITMD_TICKET_NOTIFICATION_EMAIL_TO');
         $globalTo = getDolGlobalString('TICKET_NOTIFICATION_EMAIL_TO');
         if ($notifyTo !== '') {
             $conf->global->TICKET_NOTIFICATION_EMAIL_TO = $notifyTo;
         }
         try {
-            $created = $ticket->create($author);
+            $created = TmdMailer::withTicketSender(static function () use ($ticket, $author) {
+                return $ticket->create($author);
+            });
         } finally {
             if ($notifyTo !== '') {
                 $conf->global->TICKET_NOTIFICATION_EMAIL_TO = $globalTo;
