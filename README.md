@@ -191,7 +191,8 @@ fusionnées) ne comptent jamais.
 
 ### Configuration
 
-Configuration > Modules > DoliTMD : la boîte mail des demandes TMD et les personnes à qui les tickets sont attribués.
+Menu DoliTMD → Configuration DoliTMD (droit « Accéder à la configuration du module DoliTMD »), ou Configuration >
+Modules > DoliTMD : la boîte mail des demandes TMD et les personnes à qui les tickets sont attribués.
 
 **Adresse d'expédition des mails** : tous les mails de DoliTMD partent de l'adresse choisie (accusé de réception,
 rappel des retards, messages et « demande traitée » de la fiche, et les mails du module Ticket pour les tickets des
